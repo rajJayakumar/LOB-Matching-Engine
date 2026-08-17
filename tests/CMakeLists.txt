@@ -27,3 +27,7 @@ gtest_discover_tests(test_cancel)
 add_executable(test_edge_cases test_edge_cases.cpp)
 target_link_libraries(test_edge_cases PRIVATE ob GTest::gtest_main)
 gtest_discover_tests(test_edge_cases)
+
+add_executable(test_invariants test_invariants.cpp)
+target_link_libraries(test_invariants PRIVATE ob GTest::gtest_main)
+gtest_discover_tests(test_invariants)
