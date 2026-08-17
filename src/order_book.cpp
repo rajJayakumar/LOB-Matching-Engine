@@ -16,6 +16,15 @@ std::vector<Trade> OrderBook::add(Order order) {
         order.original_quantity = order.quantity;
     }
 
+    // FOK pre-scan: reject if the entire quantity is not immediately fillable
+    if (order.tif == TimeInForce::FOK) {
+        if (order.side == Side::Buy) {
+            if (!can_fill(order, asks_)) return {};
+        } else {
+            if (!can_fill(order, bids_)) return {};
+        }
+    }
+
     std::vector<Trade> trades;
 
     if (order.side == Side::Buy) {
@@ -81,6 +90,23 @@ void OrderBook::rest(const Order& order) {
         level.orders.push_back(order);
         index_[order.order_id] = {order.side, order.price, std::prev(level.orders.end())};
     }
+}
+
+template <typename BookSide>
+bool OrderBook::can_fill(const Order& order, const BookSide& opposite) const {
+    Qty remaining = order.quantity;
+    for (auto it = opposite.begin(); it != opposite.end() && remaining > 0; ++it) {
+        if (order.kind == OrderKind::Limit) {
+            if (order.side == Side::Buy && order.price < it->first) break;
+            if (order.side == Side::Sell && order.price > it->first) break;
+        }
+        for (const auto& resting : it->second.orders) {
+            Qty fill = std::min(remaining, resting.quantity);
+            remaining -= fill;
+            if (remaining == 0) return true;
+        }
+    }
+    return remaining == 0;
 }
 
 bool OrderBook::cancel(OrderId /*id*/) {

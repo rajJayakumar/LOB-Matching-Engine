@@ -62,6 +62,9 @@ private:
     void match_against(Order& aggressor, BookSide& opposite, std::vector<Trade>& trades);
 
     void rest(const Order& order);
+
+    template <typename BookSide>
+    bool can_fill(const Order& order, const BookSide& opposite) const;
 };
 
 } // namespace ob
