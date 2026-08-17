@@ -60,7 +60,9 @@ private:
 struct TrackingHandler : Handler {
     std::vector<std::string> events;
     AddOrder last_add{};
+    AddOrderMPID last_add_mpid{};
     OrderExecuted last_exec{};
+    OrderExecutedWithPrice last_exec_wp{};
     OrderCancel last_cancel{};
     OrderDelete last_delete{};
     OrderReplace last_replace{};
@@ -77,6 +79,7 @@ struct TrackingHandler : Handler {
     }
     void on_add_order_mpid(const AddOrderMPID& m) override {
         events.push_back("F:" + std::to_string(m.order_ref));
+        last_add_mpid = m;
     }
     void on_order_executed(const OrderExecuted& m) override {
         events.push_back("E:" + std::to_string(m.order_ref));
@@ -84,6 +87,7 @@ struct TrackingHandler : Handler {
     }
     void on_order_executed_wp(const OrderExecutedWithPrice& m) override {
         events.push_back("C:" + std::to_string(m.order_ref));
+        last_exec_wp = m;
     }
     void on_order_cancel(const OrderCancel& m) override {
         events.push_back("X:" + std::to_string(m.order_ref));
@@ -135,7 +139,20 @@ std::string build_test_stream() {
     w.putStr("MSFT", 8);   // stock
     w.put32(1399500);      // price = $139.95
 
-    // Message 4: Order Executed 'E' (31 bytes body)
+    // Message 4: Add Order with MPID 'F' (40 bytes body)
+    w.beginMsg(40);
+    w.put8('F');           // type
+    w.put16(1);            // stock_locate
+    w.put16(0);            // tracking
+    w.put48(3500000000);   // timestamp
+    w.put64(200);          // order_ref
+    w.put8('S');           // buy_sell
+    w.put32(1000);         // shares
+    w.putStr("MSFT", 8);   // stock
+    w.put32(1401000);      // price = $140.10
+    w.putStr("NSDQ", 4);   // mpid
+
+    // Message 5: Order Executed 'E' (31 bytes body)
     w.beginMsg(31);
     w.put8('E');           // type
     w.put16(1);            // stock_locate
@@ -145,7 +162,19 @@ std::string build_test_stream() {
     w.put32(200);          // shares
     w.put64(1);            // match_number
 
-    // Message 5: Order Cancel 'X' (23 bytes body)
+    // Message 6: Order Executed With Price 'C' (36 bytes body)
+    w.beginMsg(36);
+    w.put8('C');           // type
+    w.put16(1);            // stock_locate
+    w.put16(0);            // tracking
+    w.put48(4500000000);   // timestamp
+    w.put64(200);          // order_ref
+    w.put32(500);          // shares
+    w.put64(2);            // match_number
+    w.put8('Y');           // printable
+    w.put32(1400000);      // price = $140.00
+
+    // Message 7: Order Cancel 'X' (23 bytes body)
     w.beginMsg(23);
     w.put8('X');           // type
     w.put16(1);            // stock_locate
@@ -184,15 +213,17 @@ TEST(ItchParser, SyntheticStreamDispatch) {
     auto count = parse_file(path, h);
     std::remove(path.c_str());
 
-    EXPECT_EQ(count, 7u);
-    ASSERT_EQ(h.events.size(), 7u);
+    EXPECT_EQ(count, 9u);
+    ASSERT_EQ(h.events.size(), 9u);
     EXPECT_EQ(h.events[0], "S:O");
     EXPECT_EQ(h.events[1], "R:MSFT");
     EXPECT_EQ(h.events[2], "A:100");
-    EXPECT_EQ(h.events[3], "E:100");
-    EXPECT_EQ(h.events[4], "X:100");
-    EXPECT_EQ(h.events[5], "D:100");
-    EXPECT_EQ(h.events[6], "U:100");
+    EXPECT_EQ(h.events[3], "F:200");
+    EXPECT_EQ(h.events[4], "E:100");
+    EXPECT_EQ(h.events[5], "C:200");
+    EXPECT_EQ(h.events[6], "X:100");
+    EXPECT_EQ(h.events[7], "D:100");
+    EXPECT_EQ(h.events[8], "U:100");
 }
 
 TEST(ItchParser, DecodedPayloads) {
@@ -208,9 +239,22 @@ TEST(ItchParser, DecodedPayloads) {
     EXPECT_EQ(h.last_add.price, 1399500);
     EXPECT_EQ(h.last_add.timestamp_ns, 3000000000ULL);
 
+    // Verify Add with MPID payload
+    EXPECT_EQ(h.last_add_mpid.order_ref, 200u);
+    EXPECT_EQ(h.last_add_mpid.buy_sell, 'S');
+    EXPECT_EQ(h.last_add_mpid.shares, 1000u);
+    EXPECT_EQ(h.last_add_mpid.price, 1401000);
+    EXPECT_EQ(std::string(h.last_add_mpid.mpid.data(), 4), "NSDQ");
+
     // Verify Execute payload
     EXPECT_EQ(h.last_exec.order_ref, 100u);
     EXPECT_EQ(h.last_exec.shares, 200u);
+
+    // Verify Execute with Price payload
+    EXPECT_EQ(h.last_exec_wp.order_ref, 200u);
+    EXPECT_EQ(h.last_exec_wp.shares, 500u);
+    EXPECT_EQ(h.last_exec_wp.price, 1400000);
+    EXPECT_EQ(h.last_exec_wp.printable, 'Y');
 
     // Verify Cancel payload
     EXPECT_EQ(h.last_cancel.order_ref, 100u);
