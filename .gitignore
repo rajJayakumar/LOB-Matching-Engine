@@ -19,3 +19,9 @@ data/itch/*
 *.dbn
 *.gz
 *.NASDAQ_ITCH50
+
+# Benchmark scratch (perf data, flamegraphs, Google Benchmark JSON output)
+perf.data
+perf.data.old
+*.svg
+bench_*.json

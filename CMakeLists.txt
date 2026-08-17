@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(OB_NATIVE_ARCH "Use -march=native for benchmark targets" ON)
+
 include(FetchContent)
 
 # databento-cpp — DBN decoder only (no live/historical HTTP client)
@@ -30,6 +32,9 @@ target_link_libraries(dbn_diff PRIVATE ob)
 
 add_executable(itch_replay apps/replay_main.cpp)
 target_link_libraries(itch_replay PRIVATE ob)
+
+# Benchmarks (not under ctest — invoked explicitly)
+add_subdirectory(bench)
 
 # Testing
 enable_testing()
