@@ -11,7 +11,12 @@ Tests that depend on them skip gracefully when the files are absent.
    python scripts/pull_databento.py --symbol INTC --date 2025-06-04 \
        --start 2025-06-04T13:30 --end 2025-06-04T20:00 --max-cost 5.0
    ```
-3. Files land in `data/databento/` (e.g. `INTC_2025-06-04_mbo.dbn`).
+3. Files land in `data/databento/` (e.g. `INTC_2025-06-04_mbo.dbn.zst`).
+
+**Cost-checked session:** 2025-06-04 (INTC), 13:30–20:00 UTC (session open to close).
+Start at session open so the book builds from empty — historical MBO has no snapshot.
+
+For AAPL stress validation, repeat with `--symbol AAPL` (same date/window).
 
 ## NASDAQ ITCH 5.0 (Phase 2B)
 
