@@ -24,7 +24,9 @@ DiffResult run_diff(const std::string& mbo_path, const std::string& mbp_path) {
     auto mbo_events = ob::dbn::load_mbo(mbo_path);
     auto mbp_snaps  = ob::dbn::load_mbp10(mbp_path);
 
-    ob::dbn::BookBuilder builder;
+    // Databento prices are nanodollars (1e-9). Sub-penny midpoints exist at
+    // $0.005 granularity; use $0.001 (1M nanodollars) tick to be safe.
+    ob::dbn::BookBuilder builder(1'000'000, 65536);
     std::size_t mbp_idx = 0;
 
     for (std::size_t i = 0; i < mbo_events.size(); ++i) {

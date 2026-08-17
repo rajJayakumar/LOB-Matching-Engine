@@ -54,7 +54,8 @@ DbnReplayResult run_databento(const std::string& path) {
     DbnReplayResult result;
     result.event_count = events.size();
 
-    ob::dbn::BookBuilder builder;
+    // Databento nanodollar tick = $0.001 = 1M nanodollars (handles sub-penny midpoints)
+    ob::dbn::BookBuilder builder(1'000'000, 65536);
     auto timer_overhead = ob::SteadyTimer::measure_overhead();
 
     auto wall_start = std::chrono::steady_clock::now();
@@ -95,7 +96,7 @@ DbnReplayResult run_databento(const std::string& path) {
 class TimedItchHandler : public ob::itch::Handler {
 public:
     explicit TimedItchHandler(const std::string& symbol)
-        : inner_(symbol)
+        : inner_(symbol, 100)  // ITCH penny tick = 100 (1e-4 units)
         , timer_overhead_(ob::SteadyTimer::measure_overhead()) {}
 
     ob::LatencyHistogram add_hist;

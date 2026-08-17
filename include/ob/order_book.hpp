@@ -3,6 +3,7 @@
 #include <ob/order.hpp>
 #include <ob/trade.hpp>
 
+#include <cassert>
 #include <cstddef>
 #include <functional>
 #include <list>
@@ -35,6 +36,8 @@ struct Locator {
 
 class OrderBook {
 public:
+    explicit OrderBook(Price tick_size = 1, std::size_t band_size = 4096);
+
     std::vector<Trade> add(Order order);
     bool cancel(OrderId id);
     bool reduce(OrderId id, Qty qty);
@@ -50,27 +53,68 @@ public:
     std::vector<LevelSnapshot> top_n_bids(std::size_t n) const;
     std::vector<LevelSnapshot> top_n_asks(std::size_t n) const;
 
-    std::size_t bid_level_count() const { return bids_.size(); }
-    std::size_t ask_level_count() const { return asks_.size(); }
+    std::size_t bid_level_count() const { return bid_count_ + bid_overflow_.size(); }
+    std::size_t ask_level_count() const { return ask_count_ + ask_overflow_.size(); }
     std::size_t order_count() const { return index_.size(); }
 
 private:
-    // Bids: highest price first (best = begin)
-    std::map<Price, PriceLevel, std::greater<>> bids_;
-    // Asks: lowest price first (best = begin)
-    std::map<Price, PriceLevel> asks_;
+    Price tick_size_;
+    std::size_t band_size_;
+
+    // Flat tick-indexed arrays for each side.
+    // Index = (price - base) / tick_size.
+    // Bids: best = highest index.  Asks: best = lowest index.
+    std::vector<PriceLevel> bid_levels_;
+    std::vector<PriceLevel> ask_levels_;
+
+    Price bid_base_ = 0;   // price at index 0 for bids
+    Price ask_base_ = 0;   // price at index 0 for asks
+
+    int best_bid_idx_ = -1;  // -1 = no bids
+    int best_ask_idx_ = -1;  // -1 = no asks
+
+    std::size_t bid_count_ = 0;  // non-empty bid levels in flat array
+    std::size_t ask_count_ = 0;  // non-empty ask levels in flat array
+
+    bool bid_init_ = false;
+    bool ask_init_ = false;
+
+    // Overflow maps for prices too far from the current band (rare outliers).
+    // Bids sorted descending (best = begin), asks sorted ascending (best = begin).
+    std::map<Price, PriceLevel, std::greater<>> bid_overflow_;
+    std::map<Price, PriceLevel> ask_overflow_;
+
     // O(1) cancel lookup
     std::unordered_map<OrderId, Locator> index_;
 
     std::uint64_t next_sequence_ = 1;
 
-    template <typename BookSide>
-    void match_against(Order& aggressor, BookSide& opposite, std::vector<Trade>& trades);
+    // Index helpers
+    int bid_idx(Price p) const { return static_cast<int>((p - bid_base_) / tick_size_); }
+    int ask_idx(Price p) const { return static_cast<int>((p - ask_base_) / tick_size_); }
+    Price bid_price(int idx) const { return bid_base_ + static_cast<Price>(idx) * tick_size_; }
+    Price ask_price(int idx) const { return ask_base_ + static_cast<Price>(idx) * tick_size_; }
+
+    bool bid_in_band(Price p) const;
+    bool ask_in_band(Price p) const;
+
+    void init_bid_band(Price first_price);
+    void init_ask_band(Price first_price);
+
+    // Ensure price is in band. Returns index >= 0 if in band, -1 if overflow.
+    int ensure_bid(Price p);
+    int ensure_ask(Price p);
+
+    void remove_bid_if_empty(int idx);
+    void remove_ask_if_empty(int idx);
 
     void rest(const Order& order);
 
-    template <typename BookSide>
-    bool can_fill(const Order& order, const BookSide& opposite) const;
+    void match_against_asks(Order& aggressor, std::vector<Trade>& trades);
+    void match_against_bids(Order& aggressor, std::vector<Trade>& trades);
+
+    bool can_fill_asks(const Order& order) const;
+    bool can_fill_bids(const Order& order) const;
 };
 
 } // namespace ob

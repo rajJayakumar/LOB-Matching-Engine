@@ -18,7 +18,8 @@ using SnapshotCallback = std::function<void(std::uint64_t timestamp_ns, const Or
 
 class ReplayHandler : public Handler {
 public:
-    explicit ReplayHandler(const std::string& target_symbol);
+    explicit ReplayHandler(const std::string& target_symbol,
+                          Price tick_size = 1, std::size_t band_size = 4096);
 
     // Set a callback for periodic snapshots (e.g., print top-of-book)
     void set_snapshot_callback(SnapshotCallback cb, std::size_t interval = 100000);

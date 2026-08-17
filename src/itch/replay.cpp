@@ -2,8 +2,10 @@
 
 namespace ob::itch {
 
-ReplayHandler::ReplayHandler(const std::string& target_symbol)
-    : target_symbol_(target_symbol) {}
+ReplayHandler::ReplayHandler(const std::string& target_symbol,
+                             Price tick_size, std::size_t band_size)
+    : target_symbol_(target_symbol)
+    , book_(tick_size, band_size) {}
 
 void ReplayHandler::set_snapshot_callback(SnapshotCallback cb, std::size_t interval) {
     snapshot_cb_ = std::move(cb);

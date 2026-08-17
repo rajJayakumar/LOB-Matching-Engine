@@ -66,6 +66,9 @@ std::vector<Mbp10Snapshot> load_mbp10(const std::string& path);
 // Maps MBO events to the OrderBook engine.
 class BookBuilder {
 public:
+    explicit BookBuilder(Price tick_size = 1, std::size_t band_size = 4096)
+        : book_(tick_size, band_size) {}
+
     // Apply a single MBO event. Returns any trades produced.
     std::vector<Trade> apply(const MboEvent& event);
 

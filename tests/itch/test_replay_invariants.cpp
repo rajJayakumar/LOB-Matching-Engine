@@ -21,7 +21,8 @@ TEST(ItchReplay, InvariantCoherence) {
     }
 
     // Replay MSFT and check invariants after every event
-    ReplayHandler handler("MSFT");
+    // ITCH prices are 1e-4 scale. US equity tick = $0.01 = 100 in ITCH units.
+    ReplayHandler handler("MSFT", 100);
     std::size_t violations = 0;
     std::string first_violation;
 

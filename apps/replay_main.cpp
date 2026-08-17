@@ -18,7 +18,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Replaying " << symbol << " from " << itch_path << " ...\n";
 
-    ob::itch::ReplayHandler handler(symbol);
+    // ITCH prices are 1e-4 scale. US equity tick = $0.01 = 100 ITCH units.
+    ob::itch::ReplayHandler handler(symbol, 100);
     handler.set_snapshot_callback(
         [&](std::uint64_t ts_ns, const ob::OrderBook& book) {
             auto bid = book.best_bid();

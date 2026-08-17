@@ -85,7 +85,9 @@ int main(int argc, char* argv[]) {
     auto mbp_snaps = ob::dbn::load_mbp10(mbp_path);
     std::cout << "  " << mbp_snaps.size() << " MBP-10 records\n";
 
-    ob::dbn::BookBuilder builder;
+    // Databento prices are nanodollars (1e-9). Sub-penny midpoints at $0.005;
+    // use $0.001 (1M nanodollars) tick for safety.
+    ob::dbn::BookBuilder builder(1'000'000, 65536);
 
     std::size_t mbp_idx = 0;
     std::size_t events_matched = 0;
