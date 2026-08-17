@@ -19,6 +19,7 @@ add_library(ob
     src/order_book.cpp
     src/dbn/loader.cpp
     src/itch/parser.cpp
+    src/itch/replay.cpp
 )
 target_include_directories(ob PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(ob PUBLIC databento::databento)
@@ -26,6 +27,9 @@ target_link_libraries(ob PUBLIC databento::databento)
 # Apps
 add_executable(dbn_diff apps/dbn_diff_main.cpp)
 target_link_libraries(dbn_diff PRIVATE ob)
+
+add_executable(itch_replay apps/replay_main.cpp)
+target_link_libraries(itch_replay PRIVATE ob)
 
 # Testing
 enable_testing()
