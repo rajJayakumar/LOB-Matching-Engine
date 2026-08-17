@@ -36,3 +36,8 @@ add_executable(test_dbn_loader dbn/test_loader.cpp)
 target_link_libraries(test_dbn_loader PRIVATE ob GTest::gtest_main)
 set_target_properties(test_dbn_loader PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 gtest_discover_tests(test_dbn_loader WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_book_diff dbn/test_book_diff.cpp)
+target_link_libraries(test_book_diff PRIVATE ob GTest::gtest_main)
+set_target_properties(test_book_diff PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+gtest_discover_tests(test_book_diff WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

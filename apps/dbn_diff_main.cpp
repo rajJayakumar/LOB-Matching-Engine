@@ -10,12 +10,6 @@ namespace {
 constexpr int NUM_LEVELS = 10;
 constexpr std::uint8_t FLAG_LAST = 0x80;  // FlagSet::kLast
 
-void print_level(const char* label, int idx,
-                 ob::Price px, ob::Qty sz, std::uint32_t ct) {
-    std::cout << "  " << label << "[" << idx << "] px=" << px
-              << " sz=" << sz << " ct=" << ct << "\n";
-}
-
 bool compare_top10(const ob::OrderBook& book,
                    const ob::dbn::Mbp10Snapshot& ref,
                    std::uint64_t seq, std::size_t event_idx) {
@@ -37,7 +31,6 @@ bool compare_top10(const ob::OrderBook& book,
         std::size_t my_bct = (i < static_cast<int>(my_bids.size())) ? my_bids[i].order_count : 0;
         std::size_t my_act = (i < static_cast<int>(my_asks.size())) ? my_asks[i].order_count : 0;
 
-        // Skip levels where reference is UNDEF (no level)
         bool ref_bid_undef = (exp_bid == ob::dbn::UNDEF_PRICE);
         bool ref_ask_undef = (exp_ask == ob::dbn::UNDEF_PRICE);
         bool my_bid_undef  = (my_bid == ob::dbn::UNDEF_PRICE);
@@ -101,13 +94,20 @@ int main(int argc, char* argv[]) {
         const auto& evt = mbo_events[i];
         builder.apply(evt);
 
-        // Check if this is the last MBO message in the event
         bool is_last = (evt.flags & FLAG_LAST) != 0;
+        if (!is_last || mbp_idx >= mbp_snaps.size()) continue;
 
-        if (is_last && mbp_idx < mbp_snaps.size()) {
-            const auto& ref = mbp_snaps[mbp_idx];
+        // Skip any MBP records whose sequence we've already passed.
+        // Some MBP snapshots correspond to non-FLAG_LAST MBO actions
+        // and cannot be matched from our FLAG_LAST-only view.
+        while (mbp_idx < mbp_snaps.size() && mbp_snaps[mbp_idx].sequence < evt.sequence) {
+            mbp_idx++;
+        }
+        if (mbp_idx >= mbp_snaps.size()) continue;
 
-            if (!compare_top10(builder.book(), ref, evt.sequence, mbp_idx)) {
+        // Compare when sequences match
+        if (mbp_snaps[mbp_idx].sequence == evt.sequence) {
+            if (!compare_top10(builder.book(), mbp_snaps[mbp_idx], evt.sequence, mbp_idx)) {
                 std::cout << "First divergence at MBP-10 event " << mbp_idx
                           << " (MBO index " << i << ")\n";
                 return 1;

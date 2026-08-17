@@ -24,12 +24,19 @@ TEST(DbnLoader, LoadMboSkipsIfAbsent) {
     auto events = ob::dbn::load_mbo(MBO_PATH);
     EXPECT_GT(events.size(), 0u);
 
-    // Verify first event has sensible fields
-    const auto& e = events[0];
-    EXPECT_NE(e.order_id, 0u);
-    EXPECT_NE(e.price, ob::dbn::UNDEF_PRICE);
-    EXPECT_GT(e.size, 0u);
-    EXPECT_NE(e.action, ob::dbn::Action::None);
+    // First record is a Clear (R) with UNDEF price; find the first Add
+    EXPECT_EQ(events[0].action, ob::dbn::Action::Clear);
+    bool found_add = false;
+    for (const auto& e : events) {
+        if (e.action == ob::dbn::Action::Add) {
+            EXPECT_NE(e.order_id, 0u);
+            EXPECT_NE(e.price, ob::dbn::UNDEF_PRICE);
+            EXPECT_GT(e.size, 0u);
+            found_add = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_add);
 }
 
 TEST(DbnLoader, LoadMbp10SkipsIfAbsent) {
@@ -41,10 +48,19 @@ TEST(DbnLoader, LoadMbp10SkipsIfAbsent) {
     auto snaps = ob::dbn::load_mbp10(MBP_PATH);
     EXPECT_GT(snaps.size(), 0u);
 
-    // Check that at least the first snapshot has defined prices at level 0
-    const auto& s = snaps[0];
-    EXPECT_NE(s.levels[0].bid_px, ob::dbn::UNDEF_PRICE);
-    EXPECT_NE(s.levels[0].ask_px, ob::dbn::UNDEF_PRICE);
+    // First snapshot may only have one side defined (book builds from empty).
+    // Find a snapshot with both sides defined.
+    const auto& s0 = snaps[0];
+    EXPECT_NE(s0.levels[0].bid_px, ob::dbn::UNDEF_PRICE);
+    bool found_both = false;
+    for (const auto& s : snaps) {
+        if (s.levels[0].bid_px != ob::dbn::UNDEF_PRICE &&
+            s.levels[0].ask_px != ob::dbn::UNDEF_PRICE) {
+            found_both = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_both);
 }
 
 TEST(DbnLoader, UndefPriceGuard) {

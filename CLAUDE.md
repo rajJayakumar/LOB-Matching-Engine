@@ -37,6 +37,7 @@ conventions; the plan wins on what to build next.
   `itch`, `replay`, `chore`, `docs`, `test`.
 - Write a real commit body when the work involved a decision or a debugged divergence — say what and
   why. Do **not** squash; the granularity is the point.
+- Do NOT add Claude co-authorship to git commits. 
 
 ## Testing
 
