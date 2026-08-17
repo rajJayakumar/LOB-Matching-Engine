@@ -23,6 +23,16 @@ ob::Order make_market(ob::OrderId id, ob::Side side, ob::Qty qty) {
     o.quantity = qty;
     return o;
 }
+ob::Order make_ioc(ob::OrderId id, ob::Side side, ob::Price price, ob::Qty qty) {
+    ob::Order o;
+    o.order_id = id;
+    o.side     = side;
+    o.kind     = ob::OrderKind::Limit;
+    o.tif      = ob::TimeInForce::IOC;
+    o.price    = price;
+    o.quantity = qty;
+    return o;
+}
 } // namespace
 
 TEST(Market, FullFill) {
@@ -60,4 +70,39 @@ TEST(Market, IntoEmptyBook) {
     auto trades = book.add(make_market(1, ob::Side::Buy, 100));
     EXPECT_TRUE(trades.empty());
     EXPECT_EQ(book.order_count(), 0u);
+}
+
+TEST(IOC, PartialFillRemainderCancelled) {
+    ob::OrderBook book;
+    book.add(make_limit(1, ob::Side::Sell, 1000, 50));
+
+    // IOC buy 100@1000 — fills 50, remainder discarded (not rested)
+    auto trades = book.add(make_ioc(2, ob::Side::Buy, 1000, 100));
+    ASSERT_EQ(trades.size(), 1u);
+    EXPECT_EQ(trades[0].quantity, 50u);
+
+    EXPECT_FALSE(book.best_bid().has_value());
+    EXPECT_FALSE(book.best_ask().has_value());
+    EXPECT_EQ(book.order_count(), 0u);
+}
+
+TEST(IOC, FullFill) {
+    ob::OrderBook book;
+    book.add(make_limit(1, ob::Side::Sell, 1000, 100));
+
+    auto trades = book.add(make_ioc(2, ob::Side::Buy, 1000, 100));
+    ASSERT_EQ(trades.size(), 1u);
+    EXPECT_EQ(trades[0].quantity, 100u);
+    EXPECT_EQ(book.order_count(), 0u);
+}
+
+TEST(IOC, NoCross) {
+    ob::OrderBook book;
+    book.add(make_limit(1, ob::Side::Sell, 1000, 100));
+
+    // IOC buy at 999 — doesn't cross, nothing fills, nothing rests
+    auto trades = book.add(make_ioc(2, ob::Side::Buy, 999, 100));
+    EXPECT_TRUE(trades.empty());
+    EXPECT_FALSE(book.best_bid().has_value());
+    EXPECT_EQ(book.order_count(), 1u);  // only the original sell
 }
