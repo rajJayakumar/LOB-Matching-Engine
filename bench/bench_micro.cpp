@@ -4,7 +4,7 @@
 // Helper: build a book with N price levels, M orders per level, on one side.
 static ob::OrderBook build_book(ob::Side side, int levels, int orders_per_level,
                                 ob::Price base_price, ob::Price tick) {
-    ob::OrderBook book;
+    ob::OrderBook book(tick);
     ob::OrderId id = 1;
     for (int l = 0; l < levels; ++l) {
         ob::Price price = (side == ob::Side::Buy)
@@ -79,7 +79,7 @@ static void BM_MatchSingleLevel(benchmark::State& state) {
     ob::OrderId next_id = 100'000;
     for (auto _ : state) {
         state.PauseTiming();
-        ob::OrderBook book;
+        ob::OrderBook book(100);
         // Place one resting buy
         ob::Order rest;
         rest.order_id = next_id++;
