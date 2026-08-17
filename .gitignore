@@ -1,0 +1,21 @@
+# Build
+build/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secrets
+.env
+
+# Market data (large and/or licensed — never commit)
+data/databento/*
+data/itch/*
+*.dbn
+*.gz
+*.NASDAQ_ITCH50
