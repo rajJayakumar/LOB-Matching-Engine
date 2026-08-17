@@ -109,9 +109,26 @@ bool OrderBook::can_fill(const Order& order, const BookSide& opposite) const {
     return remaining == 0;
 }
 
-bool OrderBook::cancel(OrderId /*id*/) {
-    // Stub — cancel logic added in Task 1.9.
-    return false;
+bool OrderBook::cancel(OrderId id) {
+    auto idx_it = index_.find(id);
+    if (idx_it == index_.end()) return false;
+
+    auto& loc = idx_it->second;
+    if (loc.side == Side::Buy) {
+        auto map_it = bids_.find(loc.price);
+        map_it->second.orders.erase(loc.it);
+        if (map_it->second.orders.empty()) {
+            bids_.erase(map_it);
+        }
+    } else {
+        auto map_it = asks_.find(loc.price);
+        map_it->second.orders.erase(loc.it);
+        if (map_it->second.orders.empty()) {
+            asks_.erase(map_it);
+        }
+    }
+    index_.erase(idx_it);
+    return true;
 }
 
 std::optional<Price> OrderBook::best_bid() const {
