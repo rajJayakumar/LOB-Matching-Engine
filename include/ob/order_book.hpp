@@ -57,6 +57,11 @@ private:
     std::unordered_map<OrderId, Locator> index_;
 
     std::uint64_t next_sequence_ = 1;
+
+    template <typename BookSide>
+    void match_against(Order& aggressor, BookSide& opposite, std::vector<Trade>& trades);
+
+    void rest(const Order& order);
 };
 
 } // namespace ob
