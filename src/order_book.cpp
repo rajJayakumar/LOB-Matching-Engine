@@ -131,6 +131,48 @@ bool OrderBook::cancel(OrderId id) {
     return true;
 }
 
+bool OrderBook::reduce(OrderId id, Qty qty) {
+    auto idx_it = index_.find(id);
+    if (idx_it == index_.end()) return false;
+
+    auto& order = *idx_it->second.it;
+    if (qty >= order.quantity) {
+        cancel(id);
+    } else {
+        order.quantity -= qty;
+    }
+    return true;
+}
+
+std::vector<Trade> OrderBook::modify(OrderId id, Price new_price, Qty new_qty) {
+    auto idx_it = index_.find(id);
+    if (idx_it == index_.end()) return {};
+
+    auto& loc = idx_it->second;
+    Side side = loc.side;
+    OrderId oid = id;
+
+    // If price unchanged, just update quantity in place (keeps time priority)
+    if (new_price == loc.price) {
+        loc.it->quantity = new_qty;
+        if (new_qty == 0) {
+            cancel(id);
+        }
+        return {};
+    }
+
+    // Price change: cancel + re-add (loses time priority)
+    cancel(id);
+    Order new_order;
+    new_order.order_id = oid;
+    new_order.side     = side;
+    new_order.kind     = OrderKind::Limit;
+    new_order.tif      = TimeInForce::GTC;
+    new_order.price    = new_price;
+    new_order.quantity = new_qty;
+    return add(new_order);
+}
+
 std::optional<Price> OrderBook::best_bid() const {
     if (bids_.empty()) return std::nullopt;
     return bids_.begin()->first;

@@ -37,6 +37,8 @@ class OrderBook {
 public:
     std::vector<Trade> add(Order order);
     bool cancel(OrderId id);
+    bool reduce(OrderId id, Qty qty);
+    std::vector<Trade> modify(OrderId id, Price new_price, Qty new_qty);
 
     std::optional<Price> best_bid() const;
     std::optional<Price> best_ask() const;
