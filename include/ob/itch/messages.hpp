@@ -5,9 +5,10 @@
 // Prices are 4-byte unsigned integers in units of 1e-4 — stored as raw int64 (never float).
 // Timestamps are 6-byte nanoseconds since midnight.
 
+#include <array>
 #include <cstdint>
 #include <cstring>
-#include <array>
+#include <string>
 
 namespace ob::itch {
 

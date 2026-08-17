@@ -45,3 +45,7 @@ gtest_discover_tests(test_book_diff WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_executable(test_itch_messages itch/test_messages.cpp)
 target_link_libraries(test_itch_messages PRIVATE ob GTest::gtest_main)
 gtest_discover_tests(test_itch_messages)
+
+add_executable(test_itch_parser itch/test_parser.cpp)
+target_link_libraries(test_itch_parser PRIVATE ob GTest::gtest_main)
+gtest_discover_tests(test_itch_parser)

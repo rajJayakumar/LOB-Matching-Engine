@@ -18,6 +18,7 @@ FetchContent_MakeAvailable(databento_cpp)
 add_library(ob
     src/order_book.cpp
     src/dbn/loader.cpp
+    src/itch/parser.cpp
 )
 target_include_directories(ob PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(ob PUBLIC databento::databento)
