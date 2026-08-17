@@ -54,3 +54,8 @@ add_executable(test_itch_sample itch/test_itch_sample.cpp)
 target_link_libraries(test_itch_sample PRIVATE ob GTest::gtest_main)
 set_target_properties(test_itch_sample PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 gtest_discover_tests(test_itch_sample WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_replay_invariants itch/test_replay_invariants.cpp)
+target_link_libraries(test_replay_invariants PRIVATE ob GTest::gtest_main)
+set_target_properties(test_replay_invariants PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+gtest_discover_tests(test_replay_invariants WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
