@@ -39,6 +39,10 @@ public:
     bool cancel(OrderId id);
     bool reduce(OrderId id, Qty qty);
     std::vector<Trade> modify(OrderId id, Price new_price, Qty new_qty);
+    void clear();
+
+    // Add a resting order directly (no matching). Used by feed replay.
+    void add_resting(Order order);
 
     std::optional<Price> best_bid() const;
     std::optional<Price> best_ask() const;

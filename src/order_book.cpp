@@ -175,6 +175,21 @@ std::vector<Trade> OrderBook::modify(OrderId id, Price new_price, Qty new_qty) {
     return add(new_order);
 }
 
+void OrderBook::clear() {
+    bids_.clear();
+    asks_.clear();
+    index_.clear();
+}
+
+void OrderBook::add_resting(Order order) {
+    if (order.quantity == 0) return;
+    order.sequence = next_sequence_++;
+    if (order.original_quantity == 0) {
+        order.original_quantity = order.quantity;
+    }
+    rest(order);
+}
+
 std::optional<Price> OrderBook::best_bid() const {
     if (bids_.empty()) return std::nullopt;
     return bids_.begin()->first;

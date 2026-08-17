@@ -78,4 +78,65 @@ std::vector<Mbp10Snapshot> load_mbp10(const std::string& path) {
     return snaps;
 }
 
+namespace {
+
+ob::Side mbo_side_to_side(MboSide s) {
+    return (s == MboSide::Bid) ? ob::Side::Buy : ob::Side::Sell;
+}
+
+} // namespace
+
+std::vector<Trade> BookBuilder::apply(const MboEvent& event) {
+    // Skip events with undefined price where a price is required
+    if (event.action == Action::Add && event.price == UNDEF_PRICE) return {};
+
+    switch (event.action) {
+        case Action::Add: {
+            Order order;
+            order.order_id = event.order_id;
+            order.side     = mbo_side_to_side(event.side);
+            order.kind     = OrderKind::Limit;
+            order.tif      = TimeInForce::GTC;
+            order.price    = event.price;
+            order.quantity = event.size;
+            // MBO adds are resting — they don't match against existing orders
+            book_.add_resting(order);
+            return {};
+        }
+        case Action::Cancel: {
+            // Reduce by size; if size covers remaining, the order is removed
+            book_.reduce(event.order_id, event.size);
+            return {};
+        }
+        case Action::Modify: {
+            // Modify price and/or size. Price change loses time priority.
+            if (event.price != UNDEF_PRICE) {
+                book_.modify(event.order_id, event.price, event.size);
+            }
+            return {};
+        }
+        case Action::Fill: {
+            // Reduce the resting order by the fill size
+            book_.reduce(event.order_id, event.size);
+            return {};
+        }
+        case Action::Clear: {
+            clear();
+            return {};
+        }
+        case Action::Trade: {
+            // Trade (T) is informational for Nasdaq MBO — does not mutate the book.
+            // The paired F/C records handle the liquidity removal.
+            return {};
+        }
+        case Action::None:
+        default:
+            return {};
+    }
+}
+
+void BookBuilder::clear() {
+    book_.clear();
+}
+
 } // namespace ob::dbn

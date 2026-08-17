@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ob/order.hpp>
+#include <ob/order_book.hpp>
 
 #include <cstdint>
 #include <functional>
@@ -61,5 +62,21 @@ std::vector<MboEvent> load_mbo(const std::string& path);
 
 // Load all MBP-10 snapshots from a DBN file.
 std::vector<Mbp10Snapshot> load_mbp10(const std::string& path);
+
+// Maps MBO events to the OrderBook engine.
+class BookBuilder {
+public:
+    // Apply a single MBO event. Returns any trades produced.
+    std::vector<Trade> apply(const MboEvent& event);
+
+    // Clear the book (action 'R').
+    void clear();
+
+    OrderBook& book() { return book_; }
+    const OrderBook& book() const { return book_; }
+
+private:
+    OrderBook book_;
+};
 
 } // namespace ob::dbn
