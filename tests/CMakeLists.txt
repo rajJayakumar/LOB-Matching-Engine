@@ -23,3 +23,7 @@ gtest_discover_tests(test_order_types)
 add_executable(test_cancel test_cancel.cpp)
 target_link_libraries(test_cancel PRIVATE ob GTest::gtest_main)
 gtest_discover_tests(test_cancel)
+
+add_executable(test_edge_cases test_edge_cases.cpp)
+target_link_libraries(test_edge_cases PRIVATE ob GTest::gtest_main)
+gtest_discover_tests(test_edge_cases)

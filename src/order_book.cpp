@@ -11,6 +11,8 @@ Qty PriceLevel::total_quantity() const {
 }
 
 std::vector<Trade> OrderBook::add(Order order) {
+    if (order.quantity == 0) return {};
+
     order.sequence = next_sequence_++;
     if (order.original_quantity == 0) {
         order.original_quantity = order.quantity;
