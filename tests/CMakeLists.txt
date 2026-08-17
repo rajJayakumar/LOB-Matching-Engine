@@ -41,3 +41,7 @@ add_executable(test_book_diff dbn/test_book_diff.cpp)
 target_link_libraries(test_book_diff PRIVATE ob GTest::gtest_main)
 set_target_properties(test_book_diff PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 gtest_discover_tests(test_book_diff WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_itch_messages itch/test_messages.cpp)
+target_link_libraries(test_itch_messages PRIVATE ob GTest::gtest_main)
+gtest_discover_tests(test_itch_messages)
