@@ -104,11 +104,6 @@ std::vector<Trade> BookBuilder::apply(const MboEvent& event) {
             return {};
         }
         case Action::Cancel: {
-            // Skip C that duplicates a Fill at the same sequence for the same order.
-            // In Nasdaq MBO, F already handles the reduction; the paired C is redundant.
-            if (event.sequence == fill_seq_ && fill_oids_.count(event.order_id)) {
-                return {};
-            }
             book_.reduce(event.order_id, event.size);
             return {};
         }
@@ -120,14 +115,9 @@ std::vector<Trade> BookBuilder::apply(const MboEvent& event) {
             return {};
         }
         case Action::Fill: {
-            // Reduce the resting order by the fill size.
-            // Track all filled order IDs at this sequence for F/C dedup.
-            if (event.sequence != fill_seq_) {
-                fill_oids_.clear();
-                fill_seq_ = event.sequence;
-            }
-            fill_oids_.insert(event.order_id);
-            book_.reduce(event.order_id, event.size);
+            // Fill (F) is informational for Nasdaq MBO — the paired C record
+            // carries the resting price and handles the actual book reduction.
+            // F's price field is the trade price, not the resting price.
             return {};
         }
         case Action::Clear: {

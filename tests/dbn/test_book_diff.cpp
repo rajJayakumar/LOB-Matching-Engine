@@ -31,7 +31,9 @@ DiffResult run_diff(const std::string& mbo_path, const std::string& mbp_path) {
         builder.apply(mbo_events[i]);
 
         bool is_last = (mbo_events[i].flags & FLAG_LAST) != 0;
-        if (!is_last || mbp_idx >= mbp_snaps.size()) continue;
+        // T (trade) events don't produce MBP-10 records — skip them.
+        if (!is_last || mbo_events[i].action == ob::dbn::Action::Trade ||
+            mbp_idx >= mbp_snaps.size()) continue;
 
         // Skip MBP records whose sequence we've already passed.
         while (mbp_idx < mbp_snaps.size() && mbp_snaps[mbp_idx].sequence < mbo_events[i].sequence) {

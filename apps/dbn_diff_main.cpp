@@ -95,7 +95,8 @@ int main(int argc, char* argv[]) {
         builder.apply(evt);
 
         bool is_last = (evt.flags & FLAG_LAST) != 0;
-        if (!is_last || mbp_idx >= mbp_snaps.size()) continue;
+        // T (trade) events don't produce MBP-10 records — skip them.
+        if (!is_last || evt.action == ob::dbn::Action::Trade || mbp_idx >= mbp_snaps.size()) continue;
 
         // Skip any MBP records whose sequence we've already passed.
         // Some MBP snapshots correspond to non-FLAG_LAST MBO actions

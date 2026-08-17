@@ -101,12 +101,21 @@ TEST(BookBuilder, ScriptedMboSequence) {
     auto bids = builder.book().top_n_bids(1);
     EXPECT_EQ(bids[0].total_qty, 30u);
 
-    // Fill 30 from the ask
+    // Fill (F) is informational — does not mutate the book
     MboEvent fill_evt;
     fill_evt.order_id = 2;
     fill_evt.size     = 30;
     fill_evt.action   = Action::Fill;
     builder.apply(fill_evt);
+    EXPECT_TRUE(builder.book().best_ask().has_value());
+    EXPECT_EQ(builder.book().order_count(), 2u);
+
+    // The paired Cancel (C) is what actually removes the filled shares
+    MboEvent cancel_fill;
+    cancel_fill.order_id = 2;
+    cancel_fill.size     = 30;
+    cancel_fill.action   = Action::Cancel;
+    builder.apply(cancel_fill);
     EXPECT_FALSE(builder.book().best_ask().has_value());
 
     // Trade event — should not mutate the book

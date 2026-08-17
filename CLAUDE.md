@@ -53,8 +53,9 @@ conventions; the plan wins on what to build next.
   event boundary (`sequence`/`ts_event` + the last-message flag). Never compare mid-event.
 - **Pull Databento from session open** so the book builds from empty; historical MBO has no prepended
   snapshot, and a mid-day start causes phantom divergences.
-- **MBO `T` (trade) does not mutate the book** for Nasdaq; the paired `F`/`C` records remove the
-  liquidity. Apply `A`/`C`/`M`/`R`/`F`; treat `T` as an informational print.
+- **MBO `T` (trade) and `F` (fill) do not mutate the book** for Nasdaq; only the paired `C` record
+  removes liquidity. Apply `A`/`C`/`M`/`R`; treat `T` and `F` as informational. `F`'s price field
+  is the trade price, not the resting price. `T` FLAG_LAST events don't produce MBP-10 records.
 - **A price-changing modify loses time priority** — model it as cancel + re-add (MBO `M`, ITCH `U`).
 - **ITCH is big-endian** and length-prefixed (2-byte BE length per message); byte-swap every
   multi-byte field. `E`/`C`/`X`/`D`/`U` reference orders by id with no price — look price up via the

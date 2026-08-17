@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <functional>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace ob::dbn {
@@ -78,10 +77,6 @@ public:
 
 private:
     OrderBook book_;
-    // Track all order IDs reduced by F at the current sequence,
-    // so we skip the redundant C at the same sequence for the same order.
-    std::uint64_t fill_seq_ = 0;
-    std::unordered_set<std::uint64_t> fill_oids_;
 };
 
 } // namespace ob::dbn
