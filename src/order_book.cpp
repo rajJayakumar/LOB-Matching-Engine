@@ -78,6 +78,7 @@ void OrderBook::remove_bid_if_empty(int idx) {
     --bid_count_;
 
     if (idx != best_bid_idx_) return;
+    if (bid_count_ == 0) { best_bid_idx_ = -1; return; }
 
     // Scan downward to find the next non-empty bid level
     for (int i = idx - 1; i >= 0; --i) {
@@ -86,7 +87,7 @@ void OrderBook::remove_bid_if_empty(int idx) {
             return;
         }
     }
-    best_bid_idx_ = -1;  // no bids left in flat array
+    best_bid_idx_ = -1;
 }
 
 void OrderBook::remove_ask_if_empty(int idx) {
@@ -94,6 +95,7 @@ void OrderBook::remove_ask_if_empty(int idx) {
     --ask_count_;
 
     if (idx != best_ask_idx_) return;
+    if (ask_count_ == 0) { best_ask_idx_ = -1; return; }
 
     // Scan upward to find the next non-empty ask level
     for (int i = idx + 1; i < static_cast<int>(band_size_); ++i) {
@@ -102,7 +104,7 @@ void OrderBook::remove_ask_if_empty(int idx) {
             return;
         }
     }
-    best_ask_idx_ = -1;  // no asks left in flat array
+    best_ask_idx_ = -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,12 +242,16 @@ void OrderBook::match_against_asks(Order& aggressor, std::vector<Trade>& trades)
 
     // Update best_ask_idx_
     if (best_ask_idx_ >= 0 && ask_levels_[best_ask_idx_].orders.empty()) {
-        int saved = best_ask_idx_;
-        best_ask_idx_ = -1;
-        for (int i = saved + 1; i < end; ++i) {
-            if (!ask_levels_[i].orders.empty()) {
-                best_ask_idx_ = i;
-                break;
+        if (ask_count_ == 0) {
+            best_ask_idx_ = -1;
+        } else {
+            int saved = best_ask_idx_;
+            best_ask_idx_ = -1;
+            for (int i = saved + 1; i < end; ++i) {
+                if (!ask_levels_[i].orders.empty()) {
+                    best_ask_idx_ = i;
+                    break;
+                }
             }
         }
     }
@@ -294,12 +300,16 @@ void OrderBook::match_against_bids(Order& aggressor, std::vector<Trade>& trades)
 
     // Update best_bid_idx_
     if (best_bid_idx_ >= 0 && bid_levels_[best_bid_idx_].orders.empty()) {
-        int saved = best_bid_idx_;
-        best_bid_idx_ = -1;
-        for (int i = saved - 1; i >= 0; --i) {
-            if (!bid_levels_[i].orders.empty()) {
-                best_bid_idx_ = i;
-                break;
+        if (bid_count_ == 0) {
+            best_bid_idx_ = -1;
+        } else {
+            int saved = best_bid_idx_;
+            best_bid_idx_ = -1;
+            for (int i = saved - 1; i >= 0; --i) {
+                if (!bid_levels_[i].orders.empty()) {
+                    best_bid_idx_ = i;
+                    break;
+                }
             }
         }
     }
