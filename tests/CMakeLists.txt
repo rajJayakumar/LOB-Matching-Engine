@@ -49,3 +49,8 @@ gtest_discover_tests(test_itch_messages)
 add_executable(test_itch_parser itch/test_parser.cpp)
 target_link_libraries(test_itch_parser PRIVATE ob GTest::gtest_main)
 gtest_discover_tests(test_itch_parser)
+
+add_executable(test_itch_sample itch/test_itch_sample.cpp)
+target_link_libraries(test_itch_sample PRIVATE ob GTest::gtest_main)
+set_target_properties(test_itch_sample PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+gtest_discover_tests(test_itch_sample WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
