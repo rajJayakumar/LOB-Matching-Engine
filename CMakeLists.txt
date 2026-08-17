@@ -22,6 +22,10 @@ add_library(ob
 target_include_directories(ob PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(ob PUBLIC databento::databento)
 
+# Apps
+add_executable(dbn_diff apps/dbn_diff_main.cpp)
+target_link_libraries(dbn_diff PRIVATE ob)
+
 # Testing
 enable_testing()
 add_subdirectory(tests)
