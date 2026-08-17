@@ -90,3 +90,40 @@ TEST(Resting, FIFOTimePriorityAtSamePrice) {
     EXPECT_EQ(trades[0].resting_id, 1u);
     EXPECT_EQ(book.order_count(), 1u);
 }
+
+TEST(Matching, PartialFillsAcrossMultipleLevels) {
+    ob::OrderBook book;
+    // Asks: 300@10.01, 200@10.02, 500@10.03
+    book.add(make_order(1, ob::Side::Sell, 1001, 300));
+    book.add(make_order(2, ob::Side::Sell, 1002, 200));
+    book.add(make_order(3, ob::Side::Sell, 1003, 500));
+    EXPECT_EQ(book.ask_level_count(), 3u);
+
+    // Buy 600 @ 10.03 — crosses all three levels, fills 300+200+100
+    auto trades = book.add(make_order(4, ob::Side::Buy, 1003, 600));
+    ASSERT_EQ(trades.size(), 3u);
+
+    // First fill: 300 @ 10.01 (best ask)
+    EXPECT_EQ(trades[0].resting_id, 1u);
+    EXPECT_EQ(trades[0].price, 1001);
+    EXPECT_EQ(trades[0].quantity, 300u);
+
+    // Second fill: 200 @ 10.02
+    EXPECT_EQ(trades[1].resting_id, 2u);
+    EXPECT_EQ(trades[1].price, 1002);
+    EXPECT_EQ(trades[1].quantity, 200u);
+
+    // Third fill: 100 @ 10.03 (partial)
+    EXPECT_EQ(trades[2].resting_id, 3u);
+    EXPECT_EQ(trades[2].price, 1003);
+    EXPECT_EQ(trades[2].quantity, 100u);
+
+    // 400 remains resting at 10.03
+    EXPECT_EQ(book.ask_level_count(), 1u);
+    EXPECT_EQ(book.best_ask().value(), 1003);
+    auto asks = book.top_n_asks(1);
+    EXPECT_EQ(asks[0].total_qty, 400u);
+
+    // Aggressor fully filled — should NOT rest
+    EXPECT_FALSE(book.best_bid().has_value());
+}
