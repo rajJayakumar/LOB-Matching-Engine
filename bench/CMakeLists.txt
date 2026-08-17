@@ -17,9 +17,9 @@ if(OB_NATIVE_ARCH)
     target_compile_options(bench_micro PRIVATE -march=native)
 endif()
 
-# --- Full-session replay benchmark --------------------------------------
+# --- Full-session replay benchmark (own main, no Google Benchmark) ------
 add_executable(bench_replay bench_replay.cpp)
-target_link_libraries(bench_replay PRIVATE ob benchmark::benchmark)
+target_link_libraries(bench_replay PRIVATE ob)
 target_compile_options(bench_replay PRIVATE -O3 -fno-omit-frame-pointer)
 if(OB_NATIVE_ARCH)
     target_compile_options(bench_replay PRIVATE -march=native)
