@@ -413,6 +413,56 @@ default-constructible (no allocator needed).
 
 ---
 
+## Task 3.8 — Pack Order to one cache line + Task 3.9 — Branch hints
+
+**Task 3.8:** Shrunk Order from 72 to 64 bytes by making Side/OrderKind/TimeInForce
+enums `uint8_t` (was `int`). Reordered fields: hot (quantity, next, prev, order_id,
+price) first, cold (original_quantity, sequence) last. `static_assert(sizeof(Order)==64)`.
+
+**Task 3.9:** Added `[[likely]]`/`[[unlikely]]` on hot-path branches (ensure in-band,
+overflow, zero-qty, FOK, cancel-not-found). Confirmed no virtual dispatch in the
+matching engine (virtuals only in ITCH parser handler).
+
+### AAPL replay (3.95M events, after vs Task 3.7)
+
+| Metric     | Task 3.7 | After  | Delta  |
+|------------|----------|--------|--------|
+| p50 total  | 44 ns    | 45 ns  | +2%    |
+| p99 total  | 215 ns   | 214 ns | 0%     |
+| p99.9 total| 487 ns   | 464 ns | -5%    |
+| Throughput | 9.16M    | 9.13M  | 0%     |
+
+### Hardware counters (AAPL, after vs Task 3.7)
+
+| Counter               | Task 3.7       | After          | Delta |
+|------------------------|----------------|----------------|-------|
+| cycles                 | 2,672,062,555  | 2,655,728,100  | -1%   |
+| instructions           | 4,977,219,752  | 4,974,754,553  | 0%    |
+| IPC                    | 1.86           | 1.87           | +1%   |
+| L1-dcache-load-misses  | 1.11%          | 1.09%          | **-2%** |
+| branch-misses          | 1.29%          | 1.29%          | 0%    |
+
+### Microbenchmarks
+
+| Benchmark          | 3.7 (ns) | After (ns) | Delta |
+|--------------------|----------|------------|-------|
+| BM_AddResting      | 42.1     | 41.2       | -2%   |
+| BM_Cancel          | 41.0     | 41.0       | 0%    |
+| BM_MatchSingleLevel | 268     | 268        | 0%    |
+| BM_MatchMultiLevel | 1978     | 1834       | **-7%** |
+
+### Notes
+
+- **Marginal result.** L1 miss improved slightly (1.11%→1.09%) from 64→72 byte struct
+  packing. Branch-miss rate unchanged — the predictor was already at 1.29%.
+- MatchMultiLevel recovered -7% — the smaller Order (64 vs 72 bytes) improves cache
+  density during multi-level walks, partially offsetting the 3.7 regression.
+- `[[likely]]`/`[[unlikely]]` had no measurable effect — GCC already predicted the
+  common paths correctly. Kept for documentation value.
+- Two consecutive optimizations below ~5% — hitting the stopping criterion per the plan.
+
+---
+
 ## Running numbers log
 
 | Task | Change | p50 (ns) | p99 (ns) | p99.9 (ns) | Throughput (msg/s) | L1 miss % | IPC | Branch miss % | Notes |
@@ -423,3 +473,4 @@ default-constructible (no allocator needed).
 | 3.6b | unordered_map reserve | 48 | 218 | 476 | 8.84M | 1.45% | 1.82 | 1.28% | Add p50 -36%, throughput +8%, no rehash |
 | 3.6c | Pool hash nodes | 44 | 209 | 449 | 9.21M | 1.11% | 1.88 | 1.28% | L1 miss -23%, IPC +3%, compact hash nodes |
 | 3.7  | Intrusive lists | 44 | 215 | 487 | 9.16M | 1.11% | 1.86 | 1.29% | Null for replay; microbench add -13%, cancel -15% |
+| 3.8+3.9 | Struct pack + branch hints | 45 | 214 | 464 | 9.13M | 1.09% | 1.87 | 1.29% | Marginal; L1 miss -2%, MatchMulti -7% |
