@@ -1,3 +1,4 @@
+[![CI](https://github.com/rajJayakumar/LOB-Matching-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/rajJayakumar/LOB-Matching-Engine/actions/workflows/ci.yml)
 # Limit Order Book & Matching Engine
 
 A single-threaded, price-time-priority limit order book and matching engine in C++20,
