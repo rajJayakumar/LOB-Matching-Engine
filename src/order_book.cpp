@@ -93,20 +93,20 @@ bool OrderBook::ask_in_band(Price p) const {
 }
 
 int OrderBook::ensure_bid(Price p) {
-    if (!bid_init_) {
+    if (!bid_init_) [[unlikely]] {
         init_bid_band(p);
         return bid_idx(p);
     }
-    if (bid_in_band(p)) return bid_idx(p);
+    if (bid_in_band(p)) [[likely]] return bid_idx(p);
     return -1;  // overflow
 }
 
 int OrderBook::ensure_ask(Price p) {
-    if (!ask_init_) {
+    if (!ask_init_) [[unlikely]] {
         init_ask_band(p);
         return ask_idx(p);
     }
-    if (ask_in_band(p)) return ask_idx(p);
+    if (ask_in_band(p)) [[likely]] return ask_idx(p);
     return -1;  // overflow
 }
 
@@ -155,7 +155,7 @@ void OrderBook::rest(const Order& order) {
 
     if (order.side == Side::Buy) {
         int idx = ensure_bid(order.price);
-        if (idx >= 0) {
+        if (idx >= 0) [[likely]] {
             auto& level = bid_levels_[idx];
             bool was_empty = level.empty();
             level.price = order.price;
@@ -176,7 +176,7 @@ void OrderBook::rest(const Order& order) {
         }
     } else {
         int idx = ensure_ask(order.price);
-        if (idx >= 0) {
+        if (idx >= 0) [[likely]] {
             auto& level = ask_levels_[idx];
             bool was_empty = level.empty();
             level.price = order.price;
@@ -203,7 +203,7 @@ void OrderBook::rest(const Order& order) {
 // ---------------------------------------------------------------------------
 
 std::vector<Trade> OrderBook::add(Order order) {
-    if (order.quantity == 0) return {};
+    if (order.quantity == 0) [[unlikely]] return {};
 
     order.sequence = next_sequence_++;
     if (order.original_quantity == 0) {
@@ -211,7 +211,7 @@ std::vector<Trade> OrderBook::add(Order order) {
     }
 
     // FOK pre-scan
-    if (order.tif == TimeInForce::FOK) {
+    if (order.tif == TimeInForce::FOK) [[unlikely]] {
         if (order.side == Side::Buy) {
             if (!can_fill_asks(order)) return {};
         } else {
@@ -364,7 +364,7 @@ void OrderBook::match_against_bids(Order& aggressor, std::vector<Trade>& trades)
 
 bool OrderBook::cancel(OrderId id) {
     auto idx_it = index_.find(id);
-    if (idx_it == index_.end()) return false;
+    if (idx_it == index_.end()) [[unlikely]] return false;
 
     auto& loc = idx_it->second;
     Order* o = loc.order;
