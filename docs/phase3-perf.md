@@ -208,9 +208,59 @@ Task 3.7 (intrusive lists to remove `std::list` entirely).
 
 ---
 
+## Task 3.6 — FreeListPool allocator for std::list nodes
+
+Replaced per-node `malloc`/`free` with a free-list object pool (`FreeListPool`)
+backed by an STL-compatible `PoolAllocator<T>`. The pool grows in 8192-slot blocks;
+O(1) acquire/release in steady state. Used custom allocator instead of
+`std::pmr::memory_resource` because Apple Clang's libc++ does not ship `<memory_resource>`.
+
+### Microbenchmarks (after vs Task 3.5)
+
+| Benchmark          | Task 3.5 (ns) | After (ns) | Delta |
+|--------------------|---------------|------------|-------|
+| BM_AddResting      | 48.2          | 48.2       | 0%    |
+| BM_Cancel          | 47.8          | 48.0       | 0%    |
+| BM_MatchSingleLevel | 266          | 276        | +4%   |
+| BM_MatchMultiLevel | 2107          | 1599       | **-24%** |
+
+### AAPL replay (3.95M events, after vs Task 3.5)
+
+| Metric     | Task 3.5 | After  | Delta  |
+|------------|----------|--------|--------|
+| p50 total  | 56 ns    | 51 ns  | **-9%**  |
+| p99 total  | 269 ns   | 223 ns | **-17%** |
+| p99.9 total| 698 ns   | 421 ns | **-40%** |
+| Add p50    | 99 ns    | 85 ns  | **-14%** |
+| Cancel p50 | 48 ns    | 45 ns  | -6%    |
+| Throughput | 7.47M    | 8.15M  | **+9%**  |
+
+### Hardware counters (AAPL, after vs Task 3.5)
+
+| Counter               | Task 3.5       | After          | Delta |
+|------------------------|----------------|----------------|-------|
+| cycles                 | 3,438,605,779  | 2,909,061,729  | **-15%** |
+| instructions           | 5,653,477,203  | 5,037,775,923  | **-11%** |
+| IPC                    | 1.77           | 1.73           | -2%   |
+| L1-dcache-load-misses  | 1.42%          | 1.33%          | -6%   |
+| branch-misses          | 1.33%          | 1.42%          | +7%   |
+
+### Notes
+
+- The p99.9 improvement (-40%) comes from eliminating `clear_page_erms` (kernel page
+  zeroing for malloc'd std::list nodes, 7.2% of profile) and `cfree` (1.6%).
+- Multi-level match benchmark improved 24% — this exercises many node alloc/dealloc
+  cycles as orders are fully filled and erased.
+- Single-op microbenchmarks (AddResting, Cancel) are flat because they add+cancel one
+  order per iteration and the pool's benefit is amortized over many operations.
+- 11% fewer instructions executed — malloc/free call chains eliminated from the hot path.
+
+---
+
 ## Running numbers log
 
 | Task | Change | p50 (ns) | p99 (ns) | p99.9 (ns) | Throughput (msg/s) | L1 miss % | IPC | Branch miss % | Notes |
 |------|--------|----------|----------|------------|--------------------|-----------|----|---------------|-------|
 | 3.4  | Baseline (AAPL) | 103 | 329 | 1163 | 5.74M | 1.53% | 1.64 | 1.77% | std::map ~15%, unordered_map ~17% of engine |
 | 3.5  | Flat tick-indexed array | 56 | 269 | 698 | 7.47M | 1.42% | 1.77 | 1.33% | p50 -46%, throughput +30%, O(1) level lookup |
+| 3.6  | FreeListPool allocator | 51 | 223 | 421 | 8.15M | 1.33% | 1.73 | 1.42% | p99.9 -40%, throughput +9%, no per-node malloc |
