@@ -183,6 +183,29 @@ outlier prices (rare stub quotes) spill to a per-side overflow `std::map`.
 - The `std::map` overhead (~15% of engine time in baseline profile) is eliminated on
   the hot path; only overflow orders (<<0.1%) still use map operations.
 
+### Post-3.5 profile (`perf record` on AAPL replay)
+
+```
+20.55%  __vdso_clock_gettime          (timer overhead — not engine)
+15.23%  unordered_map::operator[]     (order-ID index insert)
+ 7.20%  clear_page_erms               (kernel page zeroing for std::list node alloc)
+ 4.12%  load_mbo                      (file I/O + decode)
+ 3.75%  OrderBook::reduce
+ 3.20%  OrderBook::rest
+ 3.17%  OrderBook::cancel
+ 2.81%  BookBuilder::apply
+ 2.05%  main (timing loop)
+ 1.58%  cfree                         (std::list node dealloc)
+ 1.51%  unordered_map erase
+ 1.45%  DbnDecoder::DecodeRecord
+```
+
+**Profile read:** `std::map` overhead is gone (was ~15%, now 0%). The new bottleneck is
+(a) `unordered_map` insert/erase for the order-ID index (~16.7% combined), and
+(b) per-order `std::list` node allocation/deallocation (~8.8%: `clear_page_erms` 7.2% +
+`cfree` 1.6%). Next targets: Task 3.6 (object pool to eliminate per-node alloc/free) and
+Task 3.7 (intrusive lists to remove `std::list` entirely).
+
 ---
 
 ## Running numbers log
