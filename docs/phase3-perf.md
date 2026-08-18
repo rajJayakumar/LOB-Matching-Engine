@@ -361,6 +361,58 @@ compact memory, improving cache locality.
 
 ---
 
+## Task 3.7 — Intrusive per-level FIFO lists
+
+Embedded `prev`/`next` pointers directly in `Order`; replaced `std::list<Order,
+PoolAllocator<Order>>` with a hand-rolled intrusive doubly-linked list (head/tail per
+PriceLevel). Locator now holds `Order*` directly. PriceLevel is trivially
+default-constructible (no allocator needed).
+
+### Microbenchmarks (after vs Task 3.6c)
+
+| Benchmark          | 3.6c (ns) | After (ns) | Delta |
+|--------------------|-----------|------------|-------|
+| BM_AddResting      | 48.2      | 42.1       | **-13%** |
+| BM_Cancel          | 48.0      | 41.0       | **-15%** |
+| BM_MatchSingleLevel | 276      | 268        | -3%   |
+| BM_MatchMultiLevel | 1599      | 1978       | +24%  |
+
+### AAPL replay (3.95M events, after vs Task 3.6c)
+
+| Metric     | Task 3.6c | After  | Delta  |
+|------------|-----------|--------|--------|
+| p50 total  | 44 ns     | 44 ns  | 0%     |
+| p99 total  | 209 ns    | 215 ns | +3%    |
+| p99.9 total| 449 ns    | 487 ns | +8%    |
+| Add p50    | 50 ns     | 52 ns  | +4%    |
+| Cancel p50 | 43 ns     | 42 ns  | -2%    |
+| Throughput | 9.21M     | 9.16M  | -1%    |
+
+### Hardware counters (AAPL, after vs Task 3.6c)
+
+| Counter               | Task 3.6c      | After          | Delta |
+|------------------------|----------------|----------------|-------|
+| cycles                 | 2,646,490,770  | 2,672,062,555  | +1%   |
+| instructions           | 4,978,286,221  | 4,977,219,752  | 0%    |
+| IPC                    | 1.88           | 1.86           | -1%   |
+| L1-dcache-load-misses  | 1.11%          | 1.11%          | 0%    |
+| branch-misses          | 1.28%          | 1.29%          | 0%    |
+
+### Notes
+
+- **Null result for the replay workload.** The pool was already giving compact allocation;
+  removing `std::list` node indirection did not change cache behavior (L1 miss 1.11%→1.11%).
+- Microbench single-op latency improved (AddResting -13%, Cancel -15%) — simpler
+  push_back/erase vs std::list iterator operations — but these gains are dwarfed by
+  unordered_map cost in the full replay.
+- MatchMultiLevel regressed +24% — the larger Order struct (added prev/next = +16 bytes)
+  reduces cache density during multi-level walks. Acceptable: real replay is flat.
+- Kept as an architecture/clarity win: code is simpler, no std::list dependency, Locator
+  holds Order* directly, and microbench single-op latencies are at their project best
+  (42ns add, 41ns cancel from a 62ns/50ns baseline).
+
+---
+
 ## Running numbers log
 
 | Task | Change | p50 (ns) | p99 (ns) | p99.9 (ns) | Throughput (msg/s) | L1 miss % | IPC | Branch miss % | Notes |
@@ -370,3 +422,4 @@ compact memory, improving cache locality.
 | 3.6  | FreeListPool allocator | 51 | 223 | 421 | 8.15M | 1.33% | 1.73 | 1.42% | p99.9 -40%, throughput +9%, no per-node malloc |
 | 3.6b | unordered_map reserve | 48 | 218 | 476 | 8.84M | 1.45% | 1.82 | 1.28% | Add p50 -36%, throughput +8%, no rehash |
 | 3.6c | Pool hash nodes | 44 | 209 | 449 | 9.21M | 1.11% | 1.88 | 1.28% | L1 miss -23%, IPC +3%, compact hash nodes |
+| 3.7  | Intrusive lists | 44 | 215 | 487 | 9.16M | 1.11% | 1.86 | 1.29% | Null for replay; microbench add -13%, cancel -15% |
