@@ -26,6 +26,10 @@ struct Order {
     Qty         quantity = 0;       // remaining quantity
     Qty         original_quantity = 0;
     std::uint64_t sequence = 0;     // monotonic, for time priority
+
+    // Intrusive doubly-linked list pointers (per-level FIFO)
+    Order*      prev = nullptr;
+    Order*      next = nullptr;
 };
 
 } // namespace ob

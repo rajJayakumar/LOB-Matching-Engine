@@ -7,7 +7,6 @@
 #include <cassert>
 #include <cstddef>
 #include <functional>
-#include <list>
 #include <map>
 #include <memory>
 #include <optional>
@@ -16,17 +15,18 @@
 
 namespace ob {
 
-using OrderList = std::list<Order, PoolAllocator<Order>>;
-
 struct PriceLevel {
     Price price = 0;
-    OrderList orders;
+    Order* head = nullptr;
+    Order* tail = nullptr;
+    std::size_t count_ = 0;
 
-    PriceLevel() = default;
-    explicit PriceLevel(FreeListPool* pool) : orders(PoolAllocator<Order>(pool)) {}
-
+    bool empty() const { return head == nullptr; }
+    std::size_t order_count() const { return count_; }
     Qty total_quantity() const;
-    std::size_t order_count() const { return orders.size(); }
+
+    void push_back(Order* o);
+    void erase(Order* o);
 };
 
 struct LevelSnapshot {
@@ -36,9 +36,9 @@ struct LevelSnapshot {
 };
 
 struct Locator {
-    Side  side;
-    Price price;
-    OrderList::iterator it;
+    Side   side;
+    Price  price;
+    Order* order;
 };
 
 class OrderBook {
@@ -68,9 +68,9 @@ private:
     Price tick_size_;
     std::size_t band_size_;
 
-    // Pools for fixed-size node allocations — declared before the containers
-    // they back so they are destroyed after them (reverse declaration order).
-    std::unique_ptr<FreeListPool> node_pool_;   // std::list nodes
+    // Pools for fixed-size allocations — declared before the containers they
+    // back so they are destroyed after them (reverse declaration order).
+    std::unique_ptr<FreeListPool> node_pool_;   // Order objects
     std::unique_ptr<FreeListPool> index_pool_;  // unordered_map nodes
 
     // Flat tick-indexed arrays for each side.
@@ -117,6 +117,9 @@ private:
 
     void remove_bid_if_empty(int idx);
     void remove_ask_if_empty(int idx);
+
+    Order* alloc_order(const Order& src);
+    void free_order(Order* o);
 
     void rest(const Order& order);
 

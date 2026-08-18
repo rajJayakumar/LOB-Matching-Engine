@@ -6,12 +6,32 @@
 
 namespace ob {
 
+// ---------------------------------------------------------------------------
+// PriceLevel intrusive list operations
+// ---------------------------------------------------------------------------
+
 Qty PriceLevel::total_quantity() const {
     Qty total = 0;
-    for (const auto& o : orders) {
-        total += o.quantity;
-    }
+    for (Order* o = head; o != nullptr; o = o->next)
+        total += o->quantity;
     return total;
+}
+
+void PriceLevel::push_back(Order* o) {
+    o->next = nullptr;
+    o->prev = tail;
+    if (tail) tail->next = o;
+    else head = o;
+    tail = o;
+    ++count_;
+}
+
+void PriceLevel::erase(Order* o) {
+    if (o->prev) o->prev->next = o->next;
+    else head = o->next;
+    if (o->next) o->next->prev = o->prev;
+    else tail = o->prev;
+    --count_;
 }
 
 // ---------------------------------------------------------------------------
@@ -26,14 +46,24 @@ OrderBook::OrderBook(Price tick_size, std::size_t band_size)
     , index_(1 << 18, std::hash<OrderId>{}, std::equal_to<OrderId>{},
              IndexAlloc(index_pool_.get()))
 {
-    bid_levels_.reserve(band_size);
-    for (std::size_t i = 0; i < band_size; ++i) {
-        bid_levels_.emplace_back(node_pool_.get());
-    }
-    ask_levels_.reserve(band_size);
-    for (std::size_t i = 0; i < band_size; ++i) {
-        ask_levels_.emplace_back(node_pool_.get());
-    }
+    bid_levels_.resize(band_size);
+    ask_levels_.resize(band_size);
+}
+
+// ---------------------------------------------------------------------------
+// Order pool helpers
+// ---------------------------------------------------------------------------
+
+Order* OrderBook::alloc_order(const Order& src) {
+    auto* o = static_cast<Order*>(node_pool_->allocate(sizeof(Order), alignof(Order)));
+    *o = src;
+    o->prev = nullptr;
+    o->next = nullptr;
+    return o;
+}
+
+void OrderBook::free_order(Order* o) {
+    node_pool_->deallocate(o, sizeof(Order));
 }
 
 // ---------------------------------------------------------------------------
@@ -62,14 +92,13 @@ bool OrderBook::ask_in_band(Price p) const {
     return idx >= 0 && idx < static_cast<int>(band_size_);
 }
 
-
 int OrderBook::ensure_bid(Price p) {
     if (!bid_init_) {
         init_bid_band(p);
         return bid_idx(p);
     }
     if (bid_in_band(p)) return bid_idx(p);
-    return -1;  // overflow — price too far from band
+    return -1;  // overflow
 }
 
 int OrderBook::ensure_ask(Price p) {
@@ -78,7 +107,7 @@ int OrderBook::ensure_ask(Price p) {
         return ask_idx(p);
     }
     if (ask_in_band(p)) return ask_idx(p);
-    return -1;  // overflow — price too far from band
+    return -1;  // overflow
 }
 
 // ---------------------------------------------------------------------------
@@ -86,15 +115,14 @@ int OrderBook::ensure_ask(Price p) {
 // ---------------------------------------------------------------------------
 
 void OrderBook::remove_bid_if_empty(int idx) {
-    if (!bid_levels_[idx].orders.empty()) return;
+    if (!bid_levels_[idx].empty()) return;
     --bid_count_;
 
     if (idx != best_bid_idx_) return;
     if (bid_count_ == 0) { best_bid_idx_ = -1; return; }
 
-    // Scan downward to find the next non-empty bid level
     for (int i = idx - 1; i >= 0; --i) {
-        if (!bid_levels_[i].orders.empty()) {
+        if (!bid_levels_[i].empty()) {
             best_bid_idx_ = i;
             return;
         }
@@ -103,15 +131,14 @@ void OrderBook::remove_bid_if_empty(int idx) {
 }
 
 void OrderBook::remove_ask_if_empty(int idx) {
-    if (!ask_levels_[idx].orders.empty()) return;
+    if (!ask_levels_[idx].empty()) return;
     --ask_count_;
 
     if (idx != best_ask_idx_) return;
     if (ask_count_ == 0) { best_ask_idx_ = -1; return; }
 
-    // Scan upward to find the next non-empty ask level
     for (int i = idx + 1; i < static_cast<int>(band_size_); ++i) {
-        if (!ask_levels_[i].orders.empty()) {
+        if (!ask_levels_[i].empty()) {
             best_ask_idx_ = i;
             return;
         }
@@ -124,14 +151,16 @@ void OrderBook::remove_ask_if_empty(int idx) {
 // ---------------------------------------------------------------------------
 
 void OrderBook::rest(const Order& order) {
+    Order* o = alloc_order(order);
+
     if (order.side == Side::Buy) {
         int idx = ensure_bid(order.price);
         if (idx >= 0) {
             auto& level = bid_levels_[idx];
-            bool was_empty = level.orders.empty();
+            bool was_empty = level.empty();
             level.price = order.price;
-            level.orders.push_back(order);
-            index_[order.order_id] = {order.side, order.price, std::prev(level.orders.end())};
+            level.push_back(o);
+            index_[order.order_id] = {order.side, order.price, o};
             if (was_empty) {
                 ++bid_count_;
                 if (best_bid_idx_ < 0 || idx > best_bid_idx_) {
@@ -139,21 +168,20 @@ void OrderBook::rest(const Order& order) {
                 }
             }
         } else {
-            // Overflow — construct with pool if new entry
-            auto [it, inserted] = bid_overflow_.try_emplace(order.price, node_pool_.get());
+            auto [it, inserted] = bid_overflow_.try_emplace(order.price);
             auto& level = it->second;
             level.price = order.price;
-            level.orders.push_back(order);
-            index_[order.order_id] = {order.side, order.price, std::prev(level.orders.end())};
+            level.push_back(o);
+            index_[order.order_id] = {order.side, order.price, o};
         }
     } else {
         int idx = ensure_ask(order.price);
         if (idx >= 0) {
             auto& level = ask_levels_[idx];
-            bool was_empty = level.orders.empty();
+            bool was_empty = level.empty();
             level.price = order.price;
-            level.orders.push_back(order);
-            index_[order.order_id] = {order.side, order.price, std::prev(level.orders.end())};
+            level.push_back(o);
+            index_[order.order_id] = {order.side, order.price, o};
             if (was_empty) {
                 ++ask_count_;
                 if (best_ask_idx_ < 0 || idx < best_ask_idx_) {
@@ -161,12 +189,11 @@ void OrderBook::rest(const Order& order) {
                 }
             }
         } else {
-            // Overflow — construct with pool if new entry
-            auto [it, inserted] = ask_overflow_.try_emplace(order.price, node_pool_.get());
+            auto [it, inserted] = ask_overflow_.try_emplace(order.price);
             auto& level = it->second;
             level.price = order.price;
-            level.orders.push_back(order);
-            index_[order.order_id] = {order.side, order.price, std::prev(level.orders.end())};
+            level.push_back(o);
+            index_[order.order_id] = {order.side, order.price, o};
         }
     }
 }
@@ -220,49 +247,50 @@ void OrderBook::match_against_asks(Order& aggressor, std::vector<Trade>& trades)
 
     while (idx < end && aggressor.quantity > 0) {
         auto& level = ask_levels_[idx];
-        if (level.orders.empty()) {
+        if (level.empty()) {
             ++idx;
             continue;
         }
 
         Price level_price = ask_price(idx);
-
-        // Check price crossing
         if (aggressor.kind == OrderKind::Limit && aggressor.price < level_price) break;
 
-        auto order_it = level.orders.begin();
-        while (order_it != level.orders.end() && aggressor.quantity > 0) {
-            Qty fill_qty = std::min(aggressor.quantity, order_it->quantity);
+        Order* o = level.head;
+        while (o != nullptr && aggressor.quantity > 0) {
+            Qty fill_qty = std::min(aggressor.quantity, o->quantity);
 
-            trades.push_back({aggressor.order_id, order_it->order_id,
-                              order_it->price, fill_qty, aggressor.sequence});
+            trades.push_back({aggressor.order_id, o->order_id,
+                              o->price, fill_qty, aggressor.sequence});
 
             aggressor.quantity -= fill_qty;
-            order_it->quantity -= fill_qty;
+            o->quantity -= fill_qty;
 
-            if (order_it->quantity == 0) {
-                index_.erase(order_it->order_id);
-                order_it = level.orders.erase(order_it);
+            if (o->quantity == 0) {
+                Order* next = o->next;
+                index_.erase(o->order_id);
+                level.erase(o);
+                free_order(o);
+                o = next;
             } else {
-                ++order_it;
+                o = o->next;
             }
         }
 
-        if (level.orders.empty()) {
+        if (level.empty()) {
             --ask_count_;
         }
         ++idx;
     }
 
     // Update best_ask_idx_
-    if (best_ask_idx_ >= 0 && ask_levels_[best_ask_idx_].orders.empty()) {
+    if (best_ask_idx_ >= 0 && ask_levels_[best_ask_idx_].empty()) {
         if (ask_count_ == 0) {
             best_ask_idx_ = -1;
         } else {
             int saved = best_ask_idx_;
             best_ask_idx_ = -1;
             for (int i = saved + 1; i < end; ++i) {
-                if (!ask_levels_[i].orders.empty()) {
+                if (!ask_levels_[i].empty()) {
                     best_ask_idx_ = i;
                     break;
                 }
@@ -278,49 +306,50 @@ void OrderBook::match_against_bids(Order& aggressor, std::vector<Trade>& trades)
 
     while (idx >= 0 && aggressor.quantity > 0) {
         auto& level = bid_levels_[idx];
-        if (level.orders.empty()) {
+        if (level.empty()) {
             --idx;
             continue;
         }
 
         Price level_price = bid_price(idx);
-
-        // Check price crossing
         if (aggressor.kind == OrderKind::Limit && aggressor.price > level_price) break;
 
-        auto order_it = level.orders.begin();
-        while (order_it != level.orders.end() && aggressor.quantity > 0) {
-            Qty fill_qty = std::min(aggressor.quantity, order_it->quantity);
+        Order* o = level.head;
+        while (o != nullptr && aggressor.quantity > 0) {
+            Qty fill_qty = std::min(aggressor.quantity, o->quantity);
 
-            trades.push_back({aggressor.order_id, order_it->order_id,
-                              order_it->price, fill_qty, aggressor.sequence});
+            trades.push_back({aggressor.order_id, o->order_id,
+                              o->price, fill_qty, aggressor.sequence});
 
             aggressor.quantity -= fill_qty;
-            order_it->quantity -= fill_qty;
+            o->quantity -= fill_qty;
 
-            if (order_it->quantity == 0) {
-                index_.erase(order_it->order_id);
-                order_it = level.orders.erase(order_it);
+            if (o->quantity == 0) {
+                Order* next = o->next;
+                index_.erase(o->order_id);
+                level.erase(o);
+                free_order(o);
+                o = next;
             } else {
-                ++order_it;
+                o = o->next;
             }
         }
 
-        if (level.orders.empty()) {
+        if (level.empty()) {
             --bid_count_;
         }
         --idx;
     }
 
     // Update best_bid_idx_
-    if (best_bid_idx_ >= 0 && bid_levels_[best_bid_idx_].orders.empty()) {
+    if (best_bid_idx_ >= 0 && bid_levels_[best_bid_idx_].empty()) {
         if (bid_count_ == 0) {
             best_bid_idx_ = -1;
         } else {
             int saved = best_bid_idx_;
             best_bid_idx_ = -1;
             for (int i = saved - 1; i >= 0; --i) {
-                if (!bid_levels_[i].orders.empty()) {
+                if (!bid_levels_[i].empty()) {
                     best_bid_idx_ = i;
                     break;
                 }
@@ -338,16 +367,18 @@ bool OrderBook::cancel(OrderId id) {
     if (idx_it == index_.end()) return false;
 
     auto& loc = idx_it->second;
+    Order* o = loc.order;
+
     if (loc.side == Side::Buy) {
         if (bid_in_band(loc.price)) {
             int idx = bid_idx(loc.price);
-            bid_levels_[idx].orders.erase(loc.it);
+            bid_levels_[idx].erase(o);
             remove_bid_if_empty(idx);
         } else {
             auto ov = bid_overflow_.find(loc.price);
             if (ov != bid_overflow_.end()) {
-                ov->second.orders.erase(loc.it);
-                if (ov->second.orders.empty()) {
+                ov->second.erase(o);
+                if (ov->second.empty()) {
                     bid_overflow_.erase(ov);
                 }
             }
@@ -355,18 +386,19 @@ bool OrderBook::cancel(OrderId id) {
     } else {
         if (ask_in_band(loc.price)) {
             int idx = ask_idx(loc.price);
-            ask_levels_[idx].orders.erase(loc.it);
+            ask_levels_[idx].erase(o);
             remove_ask_if_empty(idx);
         } else {
             auto ov = ask_overflow_.find(loc.price);
             if (ov != ask_overflow_.end()) {
-                ov->second.orders.erase(loc.it);
-                if (ov->second.orders.empty()) {
+                ov->second.erase(o);
+                if (ov->second.empty()) {
                     ask_overflow_.erase(ov);
                 }
             }
         }
     }
+    free_order(o);
     index_.erase(idx_it);
     return true;
 }
@@ -379,11 +411,11 @@ bool OrderBook::reduce(OrderId id, Qty qty) {
     auto idx_it = index_.find(id);
     if (idx_it == index_.end()) return false;
 
-    auto& order = *idx_it->second.it;
-    if (qty >= order.quantity) {
+    Order* o = idx_it->second.order;
+    if (qty >= o->quantity) {
         cancel(id);
     } else {
-        order.quantity -= qty;
+        o->quantity -= qty;
     }
     return true;
 }
@@ -402,7 +434,7 @@ std::vector<Trade> OrderBook::modify(OrderId id, Price new_price, Qty new_qty) {
 
     // If price unchanged, just update quantity in place (keeps time priority)
     if (new_price == loc.price) {
-        loc.it->quantity = new_qty;
+        loc.order->quantity = new_qty;
         if (new_qty == 0) {
             cancel(id);
         }
@@ -426,12 +458,20 @@ std::vector<Trade> OrderBook::modify(OrderId id, Price new_price, Qty new_qty) {
 // ---------------------------------------------------------------------------
 
 void OrderBook::clear() {
-    for (auto& level : bid_levels_) {
-        level.orders.clear();
-    }
-    for (auto& level : ask_levels_) {
-        level.orders.clear();
-    }
+    auto dealloc_level = [this](PriceLevel& level) {
+        Order* o = level.head;
+        while (o) {
+            Order* next = o->next;
+            free_order(o);
+            o = next;
+        }
+        level.head = level.tail = nullptr;
+        level.count_ = 0;
+    };
+    for (auto& level : bid_levels_) dealloc_level(level);
+    for (auto& level : ask_levels_) dealloc_level(level);
+    for (auto& [_, level] : bid_overflow_) dealloc_level(level);
+    for (auto& [_, level] : ask_overflow_) dealloc_level(level);
     bid_overflow_.clear();
     ask_overflow_.clear();
     index_.clear();
@@ -486,7 +526,6 @@ std::vector<LevelSnapshot> OrderBook::top_n_bids(std::size_t n) const {
     std::vector<LevelSnapshot> result;
     result.reserve(n);
 
-    // Merge flat array (descending from best) with overflow (descending by key).
     int fi = best_bid_idx_;
     auto oi = bid_overflow_.begin();
     auto oe = bid_overflow_.end();
@@ -496,16 +535,13 @@ std::vector<LevelSnapshot> OrderBook::top_n_bids(std::size_t n) const {
         Price op = (oi != oe) ? oi->first : std::numeric_limits<Price>::min();
 
         if (fi >= 0 && fp >= op) {
-            // Take from flat array
-            if (!bid_levels_[fi].orders.empty()) {
+            if (!bid_levels_[fi].empty()) {
                 result.push_back({fp, bid_levels_[fi].total_quantity(),
                                   bid_levels_[fi].order_count()});
             }
             --fi;
-            // Skip empty flat levels
-            while (fi >= 0 && bid_levels_[fi].orders.empty()) --fi;
+            while (fi >= 0 && bid_levels_[fi].empty()) --fi;
         } else {
-            // Take from overflow
             result.push_back({oi->first, oi->second.total_quantity(),
                               oi->second.order_count()});
             ++oi;
@@ -518,29 +554,24 @@ std::vector<LevelSnapshot> OrderBook::top_n_asks(std::size_t n) const {
     std::vector<LevelSnapshot> result;
     result.reserve(n);
 
-    // Merge flat array (ascending from best) with overflow (ascending by key).
     int fi = best_ask_idx_;
     int fend = static_cast<int>(band_size_);
     auto oi = ask_overflow_.begin();
     auto oe = ask_overflow_.end();
 
     while (result.size() < n && (fi >= 0 || oi != oe)) {
-        // fi < 0 means no more flat levels; use max as sentinel
         Price fp = (fi >= 0) ? ask_price(fi) : std::numeric_limits<Price>::max();
         Price op = (oi != oe) ? oi->first : std::numeric_limits<Price>::max();
 
         if (fi >= 0 && fp <= op) {
-            // Take from flat array
-            if (!ask_levels_[fi].orders.empty()) {
+            if (!ask_levels_[fi].empty()) {
                 result.push_back({fp, ask_levels_[fi].total_quantity(),
                                   ask_levels_[fi].order_count()});
             }
             ++fi;
-            // Skip empty flat levels and check bound
-            while (fi < fend && ask_levels_[fi].orders.empty()) ++fi;
+            while (fi < fend && ask_levels_[fi].empty()) ++fi;
             if (fi >= fend) fi = -1;
         } else {
-            // Take from overflow
             result.push_back({oi->first, oi->second.total_quantity(),
                               oi->second.order_count()});
             ++oi;
@@ -557,11 +588,11 @@ bool OrderBook::can_fill_asks(const Order& order) const {
     if (best_ask_idx_ < 0) return false;
     Qty remaining = order.quantity;
     for (int i = best_ask_idx_; i < static_cast<int>(band_size_) && remaining > 0; ++i) {
-        if (ask_levels_[i].orders.empty()) continue;
+        if (ask_levels_[i].empty()) continue;
         Price level_price = ask_price(i);
         if (order.kind == OrderKind::Limit && order.price < level_price) break;
-        for (const auto& resting : ask_levels_[i].orders) {
-            Qty fill = std::min(remaining, resting.quantity);
+        for (Order* o = ask_levels_[i].head; o != nullptr; o = o->next) {
+            Qty fill = std::min(remaining, o->quantity);
             remaining -= fill;
             if (remaining == 0) return true;
         }
@@ -573,11 +604,11 @@ bool OrderBook::can_fill_bids(const Order& order) const {
     if (best_bid_idx_ < 0) return false;
     Qty remaining = order.quantity;
     for (int i = best_bid_idx_; i >= 0 && remaining > 0; --i) {
-        if (bid_levels_[i].orders.empty()) continue;
+        if (bid_levels_[i].empty()) continue;
         Price level_price = bid_price(i);
         if (order.kind == OrderKind::Limit && order.price > level_price) break;
-        for (const auto& resting : bid_levels_[i].orders) {
-            Qty fill = std::min(remaining, resting.quantity);
+        for (Order* o = bid_levels_[i].head; o != nullptr; o = o->next) {
+            Qty fill = std::min(remaining, o->quantity);
             remaining -= fill;
             if (remaining == 0) return true;
         }
