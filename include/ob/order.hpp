@@ -11,25 +11,29 @@ using Price   = std::int64_t;
 using Qty     = std::uint64_t;
 using OrderId = std::uint64_t;
 
-enum class Side { Buy, Sell };
+enum class Side : std::uint8_t { Buy, Sell };
 
-enum class TimeInForce { GTC, IOC, FOK };
+enum class TimeInForce : std::uint8_t { GTC, IOC, FOK };
 
-enum class OrderKind { Limit, Market };
+enum class OrderKind : std::uint8_t { Limit, Market };
 
 struct Order {
+    // Hot fields — accessed on every match/cancel (first cache line)
+    Qty         quantity = 0;       // remaining quantity
+    Order*      next = nullptr;     // intrusive list: iteration + unlink
+    Order*      prev = nullptr;     // intrusive list: unlink
     OrderId     order_id = 0;
+    Price       price    = 0;       // ignored / 0 for market orders
     Side        side     = Side::Buy;
     OrderKind   kind     = OrderKind::Limit;
     TimeInForce tif      = TimeInForce::GTC;
-    Price       price    = 0;       // ignored / 0 for market orders
-    Qty         quantity = 0;       // remaining quantity
+    // 5 bytes padding
+
+    // Cold fields — set once, not on hot path
     Qty         original_quantity = 0;
     std::uint64_t sequence = 0;     // monotonic, for time priority
-
-    // Intrusive doubly-linked list pointers (per-level FIFO)
-    Order*      prev = nullptr;
-    Order*      next = nullptr;
 };
+
+static_assert(sizeof(Order) == 64, "Order must fit in one cache line");
 
 } // namespace ob
