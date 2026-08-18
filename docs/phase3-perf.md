@@ -255,6 +255,35 @@ O(1) acquire/release in steady state. Used custom allocator instead of
   order per iteration and the pool's benefit is amortized over many operations.
 - 11% fewer instructions executed — malloc/free call chains eliminated from the hot path.
 
+### Post-3.6 profile (`perf record` on AAPL replay)
+
+```
+20.96%  __vdso_clock_gettime          (timer overhead — not engine)
+11.76%  unordered_map::operator[]     (order-ID index insert)
+ 6.97%  clear_page_erms               (kernel page zeroing — now from unordered_map)
+ 4.79%  OrderBook::rest
+ 4.72%  OrderBook::reduce
+ 4.63%  load_mbo                      (file I/O + decode)
+ 3.64%  OrderBook::cancel
+ 3.16%  BookBuilder::apply
+ 2.07%  main (timing loop)
+ 1.61%  DbnDecoder::DecodeRecord
+ 1.44%  unordered_map erase
+ 1.04%  unordered_map (other)
+ 1.02%  cfree
+```
+
+**Profile read:** The pool eliminated std::list node allocation from the hot path (cfree
+dropped 1.58%→1.02%), but `clear_page_erms` barely moved (7.20%→6.97%) — it is now
+dominated by `unordered_map` internal allocations (bucket array rehash + per-entry node
+allocation), not std::list. The `unordered_map` order-ID index is the largest remaining
+engine cost at ~14.2% combined (insert 11.8% + erase 1.4% + other 1.0%).
+
+Next targets: (a) `unordered_map` churn (~14.2%) — `reserve()` to eliminate rehash,
+or replace with a flat hash map; (b) intrusive lists (Task 3.7) to improve cache locality
+by embedding list pointers directly in the Order struct, eliminating std::list node
+indirection.
+
 ---
 
 ## Running numbers log
