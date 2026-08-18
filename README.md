@@ -29,7 +29,22 @@ by data source (Databento: 1e-9 nanodollars; ITCH: 1e-4) and are never mixed.
 
 Cancel, reduce, and modify (cancel + re-add on price change) are also supported.
 
-## Roadmap
+## Performance
+
+Replaying 3.95M AAPL order events on a GCP `c4-standard-4` (Intel Granite Rapids):
+
+| Metric | Baseline | Optimized | Improvement |
+|--------|----------|-----------|-------------|
+| p50 latency | 103 ns | 45 ns | **-56%** |
+| p99 latency | 329 ns | 214 ns | **-35%** |
+| Throughput | 5.74M msg/s | 9.13M msg/s | **+59%** |
+
+Key changes: flat tick-indexed array replacing `std::map` (O(1) level lookup), pool
+allocation eliminating per-order `malloc`/`free`, and intrusive FIFO lists. Full
+methodology, per-optimization deltas, and hardware-counter analysis in
+[`docs/phase3-writeup.md`](docs/phase3-writeup.md).
+
+## Phases
 
 ### Phase 1 — Correct matching engine
 Core types, book structure, matching logic for all order types, cancel/modify,
@@ -43,6 +58,11 @@ for full trading sessions (INTC + AAPL on XNAS.ITCH).
 ### Phase 2B — Raw NASDAQ ITCH 5.0 parser
 Parse the big-endian, length-prefixed ITCH 5.0 binary format directly, replay through
 the engine, and validate structural invariants over a full session.
+
+### Phase 3 — Performance optimization
+Profile-guided optimization with before/after measurements on every change.
+See [`docs/phase3-perf.md`](docs/phase3-perf.md) for the numbers log and
+[`docs/phase3-writeup.md`](docs/phase3-writeup.md) for the narrative.
 
 ## Build
 

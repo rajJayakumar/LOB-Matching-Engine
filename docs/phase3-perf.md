@@ -474,3 +474,46 @@ matching engine (virtuals only in ITCH parser handler).
 | 3.6c | Pool hash nodes | 44 | 209 | 449 | 9.21M | 1.11% | 1.88 | 1.28% | L1 miss -23%, IPC +3%, compact hash nodes |
 | 3.7  | Intrusive lists | 44 | 215 | 487 | 9.16M | 1.11% | 1.86 | 1.29% | Null for replay; microbench add -13%, cancel -15% |
 | 3.8+3.9 | Struct pack + branch hints | 45 | 214 | 464 | 9.13M | 1.09% | 1.87 | 1.29% | Marginal; L1 miss -2%, MatchMulti -7% |
+
+---
+
+## Consolidated before/after table (AAPL full-session replay, 3.95M events)
+
+### Latency
+
+| Metric          | Baseline | Final  | Improvement |
+|-----------------|----------|--------|-------------|
+| **p50 total**   | 103 ns   | 45 ns  | **-56%**    |
+| **p99 total**   | 329 ns   | 214 ns | **-35%**    |
+| **p99.9 total** | 1163 ns  | 464 ns | **-60%**    |
+| Add p50         | 135 ns   | 52 ns  | -61%        |
+| Cancel p50      | 97 ns    | 42 ns  | -57%        |
+
+### Throughput
+
+| Metric         | Baseline  | Final    | Improvement |
+|----------------|-----------|----------|-------------|
+| **Throughput**  | 5.74M msg/s | 9.13M msg/s | **+59%** |
+
+### Hardware counters
+
+| Counter            | Baseline | Final | Improvement |
+|--------------------|----------|-------|-------------|
+| **IPC**            | 1.64     | 1.87  | **+14%**    |
+| **L1 d-cache miss** | 1.53%  | 1.09% | **-29%**    |
+| **Branch miss**    | 1.77%    | 1.29% | **-27%**    |
+
+### Microbenchmarks (isolated hot-path operations)
+
+| Benchmark           | Baseline (ns) | Final (ns) | Improvement |
+|---------------------|---------------|------------|-------------|
+| BM_AddResting       | 61.6          | 41.2       | **-33%**    |
+| BM_Cancel           | 49.5          | 41.0       | **-17%**    |
+| BM_MatchSingleLevel | 315           | 268        | **-15%**    |
+| BM_MatchMultiLevel  | 2691          | 1834       | **-32%**    |
+
+### Stopping criterion
+
+Two consecutive optimizations (Task 3.7: intrusive lists, Tasks 3.8+3.9: struct pack + branch hints)
+each yielded < 5% p99 improvement. Per the plan's stopping rule, the remaining bottleneck is outside
+the book data structure (timer overhead and file I/O dominate the profile). Phase 3B is complete.
