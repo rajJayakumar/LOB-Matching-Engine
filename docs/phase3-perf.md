@@ -139,8 +139,55 @@ optimization order: Task 3.5 (flat array) then 3.6 (pool) then 3.7 (intrusive li
 
 ---
 
+## Task 3.5 — Flat tick-indexed price-level array
+
+Replaced both `std::map<Price, PriceLevel>` sides with flat `std::vector<PriceLevel>`
+indexed by `(price - base) / tick_size`. O(1) level lookup vs O(log N). Out-of-band
+outlier prices (rare stub quotes) spill to a per-side overflow `std::map`.
+
+### Microbenchmarks (after vs baseline)
+
+| Benchmark          | Baseline (ns) | After (ns) | Delta |
+|--------------------|---------------|------------|-------|
+| BM_AddResting      | 61.6          | 48.2       | -22%  |
+| BM_Cancel          | 49.5          | 47.8       | -3%   |
+| BM_MatchSingleLevel | 315          | 266        | -16%  |
+| BM_MatchMultiLevel | 2691          | 2107       | -22%  |
+
+### AAPL replay (3.95M events, after vs baseline)
+
+| Metric     | Baseline | After  | Delta  |
+|------------|----------|--------|--------|
+| p50 total  | 103 ns   | 56 ns  | **-46%** |
+| p99 total  | 329 ns   | 269 ns | -18%   |
+| p99.9 total| 1163 ns  | 698 ns | -40%   |
+| Add p50    | 135 ns   | 99 ns  | -27%   |
+| Cancel p50 | 97 ns    | 48 ns  | **-51%** |
+| Throughput | 5.74M    | 7.47M  | **+30%** |
+
+### Hardware counters (AAPL, after vs baseline)
+
+| Counter               | Baseline       | After          | Delta |
+|------------------------|----------------|----------------|-------|
+| IPC                    | 1.64           | 1.77           | +8%   |
+| L1-dcache-load-misses  | 1.53%          | 1.42%          | -7%   |
+| branch-misses          | 1.77%          | 1.33%          | -25%  |
+
+### Notes
+
+- Band initialized once on first order per side; no rebasing needed — a single-day
+  session stays well within the ±$32 band.
+- Fixed two bugs during development: (1) sub-penny tick causing index collisions
+  (tick 10M→1M), (2) linear scan of empty levels on last-level exhaustion
+  (short-circuited with count==0 check).
+- The `std::map` overhead (~15% of engine time in baseline profile) is eliminated on
+  the hot path; only overflow orders (<<0.1%) still use map operations.
+
+---
+
 ## Running numbers log
 
 | Task | Change | p50 (ns) | p99 (ns) | p99.9 (ns) | Throughput (msg/s) | L1 miss % | IPC | Branch miss % | Notes |
 |------|--------|----------|----------|------------|--------------------|-----------|----|---------------|-------|
 | 3.4  | Baseline (AAPL) | 103 | 329 | 1163 | 5.74M | 1.53% | 1.64 | 1.77% | std::map ~15%, unordered_map ~17% of engine |
+| 3.5  | Flat tick-indexed array | 56 | 269 | 698 | 7.47M | 1.42% | 1.77 | 1.33% | p50 -46%, throughput +30%, O(1) level lookup |
