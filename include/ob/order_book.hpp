@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ob/order.hpp>
+#include <ob/pool.hpp>
 #include <ob/trade.hpp>
 
 #include <cassert>
@@ -8,15 +9,21 @@
 #include <functional>
 #include <list>
 #include <map>
+#include <memory>
 #include <optional>
 #include <unordered_map>
 #include <vector>
 
 namespace ob {
 
+using OrderList = std::list<Order, PoolAllocator<Order>>;
+
 struct PriceLevel {
     Price price = 0;
-    std::list<Order> orders;
+    OrderList orders;
+
+    PriceLevel() = default;
+    explicit PriceLevel(FreeListPool* pool) : orders(PoolAllocator<Order>(pool)) {}
 
     Qty total_quantity() const;
     std::size_t order_count() const { return orders.size(); }
@@ -31,7 +38,7 @@ struct LevelSnapshot {
 struct Locator {
     Side  side;
     Price price;
-    std::list<Order>::iterator it;
+    OrderList::iterator it;
 };
 
 class OrderBook {
@@ -61,26 +68,27 @@ private:
     Price tick_size_;
     std::size_t band_size_;
 
+    // Pool for std::list node allocations — declared before the vectors so it
+    // is destroyed after them (reverse declaration order).
+    std::unique_ptr<FreeListPool> node_pool_;
+
     // Flat tick-indexed arrays for each side.
-    // Index = (price - base) / tick_size.
-    // Bids: best = highest index.  Asks: best = lowest index.
     std::vector<PriceLevel> bid_levels_;
     std::vector<PriceLevel> ask_levels_;
 
-    Price bid_base_ = 0;   // price at index 0 for bids
-    Price ask_base_ = 0;   // price at index 0 for asks
+    Price bid_base_ = 0;
+    Price ask_base_ = 0;
 
-    int best_bid_idx_ = -1;  // -1 = no bids
-    int best_ask_idx_ = -1;  // -1 = no asks
+    int best_bid_idx_ = -1;
+    int best_ask_idx_ = -1;
 
-    std::size_t bid_count_ = 0;  // non-empty bid levels in flat array
-    std::size_t ask_count_ = 0;  // non-empty ask levels in flat array
+    std::size_t bid_count_ = 0;
+    std::size_t ask_count_ = 0;
 
     bool bid_init_ = false;
     bool ask_init_ = false;
 
-    // Overflow maps for prices too far from the current band (rare outliers).
-    // Bids sorted descending (best = begin), asks sorted ascending (best = begin).
+    // Overflow maps for prices too far from the current band.
     std::map<Price, PriceLevel, std::greater<>> bid_overflow_;
     std::map<Price, PriceLevel> ask_overflow_;
 
@@ -101,7 +109,6 @@ private:
     void init_bid_band(Price first_price);
     void init_ask_band(Price first_price);
 
-    // Ensure price is in band. Returns index >= 0 if in band, -1 if overflow.
     int ensure_bid(Price p);
     int ensure_ask(Price p);
 

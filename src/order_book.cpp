@@ -21,8 +21,17 @@ Qty PriceLevel::total_quantity() const {
 OrderBook::OrderBook(Price tick_size, std::size_t band_size)
     : tick_size_(tick_size)
     , band_size_(band_size)
-    , bid_levels_(band_size)
-    , ask_levels_(band_size) {}
+    , node_pool_(std::make_unique<FreeListPool>(8192))
+{
+    bid_levels_.reserve(band_size);
+    for (std::size_t i = 0; i < band_size; ++i) {
+        bid_levels_.emplace_back(node_pool_.get());
+    }
+    ask_levels_.reserve(band_size);
+    for (std::size_t i = 0; i < band_size; ++i) {
+        ask_levels_.emplace_back(node_pool_.get());
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Band initialization
@@ -127,8 +136,9 @@ void OrderBook::rest(const Order& order) {
                 }
             }
         } else {
-            // Overflow
-            auto& level = bid_overflow_[order.price];
+            // Overflow — construct with pool if new entry
+            auto [it, inserted] = bid_overflow_.try_emplace(order.price, node_pool_.get());
+            auto& level = it->second;
             level.price = order.price;
             level.orders.push_back(order);
             index_[order.order_id] = {order.side, order.price, std::prev(level.orders.end())};
@@ -148,8 +158,9 @@ void OrderBook::rest(const Order& order) {
                 }
             }
         } else {
-            // Overflow
-            auto& level = ask_overflow_[order.price];
+            // Overflow — construct with pool if new entry
+            auto [it, inserted] = ask_overflow_.try_emplace(order.price, node_pool_.get());
+            auto& level = it->second;
             level.price = order.price;
             level.orders.push_back(order);
             index_[order.order_id] = {order.side, order.price, std::prev(level.orders.end())};
