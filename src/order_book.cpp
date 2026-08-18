@@ -31,6 +31,7 @@ OrderBook::OrderBook(Price tick_size, std::size_t band_size)
     for (std::size_t i = 0; i < band_size; ++i) {
         ask_levels_.emplace_back(node_pool_.get());
     }
+    index_.reserve(1 << 18);  // 256K buckets — avoids rehash for typical sessions
 }
 
 // ---------------------------------------------------------------------------
