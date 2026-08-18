@@ -75,11 +75,12 @@ BENCHMARK(BM_Cancel);
 
 // ---------- 3. Single-level cross match -------------------------------------
 // Aggressive sell crosses exactly one resting buy order.
+// Book is kept alive to avoid cold-cache artifacts from repeated construction.
 static void BM_MatchSingleLevel(benchmark::State& state) {
+    ob::OrderBook book(100);
     ob::OrderId next_id = 100'000;
     for (auto _ : state) {
         state.PauseTiming();
-        ob::OrderBook book(100);
         // Place one resting buy
         ob::Order rest;
         rest.order_id = next_id++;
@@ -108,14 +109,29 @@ BENCHMARK(BM_MatchSingleLevel);
 
 // ---------- 4. Multi-level walk match ---------------------------------------
 // Aggressive market sell walks through multiple bid levels.
+// Book is kept alive; levels rebuilt each iteration via clear().
 static void BM_MatchMultiLevel(benchmark::State& state) {
     const int levels = 10;
     const int orders_per_level = 5;
+    ob::OrderBook book(100);
     ob::OrderId next_id = 1'000'000;
 
     for (auto _ : state) {
         state.PauseTiming();
-        auto book = build_book(ob::Side::Buy, levels, orders_per_level, 10000, 100);
+        book.clear();
+        for (int l = 0; l < levels; ++l) {
+            ob::Price price = 10000 - static_cast<ob::Price>(l) * 100;
+            for (int o = 0; o < orders_per_level; ++o) {
+                ob::Order order;
+                order.order_id = next_id++;
+                order.side     = ob::Side::Buy;
+                order.kind     = ob::OrderKind::Limit;
+                order.tif      = ob::TimeInForce::GTC;
+                order.price    = price;
+                order.quantity = 100;
+                book.add(order);
+            }
+        }
         state.ResumeTiming();
 
         // Market sell that walks through all levels
