@@ -286,6 +286,43 @@ indirection.
 
 ---
 
+## Task 3.6b — unordered_map reserve (rehash elimination)
+
+One-line change: `index_.reserve(1 << 18)` (256K buckets) in the OrderBook constructor.
+Eliminates all rehash cycles during typical sessions.
+
+### AAPL replay (3.95M events, after vs Task 3.6)
+
+| Metric     | Task 3.6 | After  | Delta  |
+|------------|----------|--------|--------|
+| p50 total  | 51 ns    | 48 ns  | **-6%**  |
+| p99 total  | 223 ns   | 218 ns | -2%    |
+| p99.9 total| 421 ns   | 476 ns | +13%   |
+| Add p50    | 85 ns    | 54 ns  | **-36%** |
+| Cancel p50 | 45 ns    | 46 ns  | 0%     |
+| Throughput | 8.15M    | 8.84M  | **+8%**  |
+
+### Hardware counters (AAPL, after vs Task 3.6)
+
+| Counter               | Task 3.6       | After          | Delta |
+|------------------------|----------------|----------------|-------|
+| cycles                 | 2,909,061,729  | 2,737,238,922  | **-6%** |
+| instructions           | 5,037,775,923  | 4,977,833,875  | -1%   |
+| IPC                    | 1.73           | 1.82           | **+5%** |
+| L1-dcache-load-misses  | 1.33%          | 1.45%          | +9%   |
+| branch-misses          | 1.42%          | 1.28%          | **-10%** |
+
+### Notes
+
+- Add p50 dropped 36% — rehash was the main contributor to insert latency variance.
+- Branch-miss rate dropped 10% — the rehash code path (unpredictable) is never taken.
+- L1 miss rate increased slightly (+9%) — the pre-allocated 256K bucket array occupies
+  more cache, but the net effect is positive (6% fewer cycles).
+- p99.9 regressed slightly (+13%) — occasional cold-cache accesses to the larger bucket
+  array; acceptable given the median/throughput improvements.
+
+---
+
 ## Running numbers log
 
 | Task | Change | p50 (ns) | p99 (ns) | p99.9 (ns) | Throughput (msg/s) | L1 miss % | IPC | Branch miss % | Notes |
@@ -293,3 +330,4 @@ indirection.
 | 3.4  | Baseline (AAPL) | 103 | 329 | 1163 | 5.74M | 1.53% | 1.64 | 1.77% | std::map ~15%, unordered_map ~17% of engine |
 | 3.5  | Flat tick-indexed array | 56 | 269 | 698 | 7.47M | 1.42% | 1.77 | 1.33% | p50 -46%, throughput +30%, O(1) level lookup |
 | 3.6  | FreeListPool allocator | 51 | 223 | 421 | 8.15M | 1.33% | 1.73 | 1.42% | p99.9 -40%, throughput +9%, no per-node malloc |
+| 3.6b | unordered_map reserve | 48 | 218 | 476 | 8.84M | 1.45% | 1.82 | 1.28% | Add p50 -36%, throughput +8%, no rehash |
