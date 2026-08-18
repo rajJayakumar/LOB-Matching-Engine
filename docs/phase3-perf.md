@@ -323,6 +323,44 @@ Eliminates all rehash cycles during typical sessions.
 
 ---
 
+## Task 3.6c — Pool-allocate unordered_map hash nodes
+
+Added a second `FreeListPool` (`index_pool_`) for the order-ID `unordered_map`. Each
+insert/erase was calling `malloc`/`free` for hash nodes, with `clear_page_erms` (kernel
+page zeroing) at 7.5% in the post-3.6b profile. Pool allocation keeps hash nodes in
+compact memory, improving cache locality.
+
+### AAPL replay (3.95M events, after vs Task 3.6b)
+
+| Metric     | Task 3.6b | After  | Delta  |
+|------------|-----------|--------|--------|
+| p50 total  | 48 ns     | 44 ns  | **-8%**  |
+| p99 total  | 218 ns    | 209 ns | -4%    |
+| p99.9 total| 476 ns    | 449 ns | **-6%**  |
+| Add p50    | 54 ns     | 50 ns  | **-7%**  |
+| Cancel p50 | 46 ns     | 43 ns  | **-7%**  |
+| Throughput | 8.84M     | 9.21M  | **+4%**  |
+
+### Hardware counters (AAPL, after vs Task 3.6b)
+
+| Counter               | Task 3.6b      | After          | Delta |
+|------------------------|----------------|----------------|-------|
+| cycles                 | 2,737,238,922  | 2,646,490,770  | **-3%** |
+| instructions           | 4,977,833,875  | 4,978,286,221  | 0%    |
+| IPC                    | 1.82           | 1.88           | **+3%** |
+| L1-dcache-load-misses  | 1.45%          | 1.11%          | **-23%** |
+| branch-misses          | 1.28%          | 1.28%          | 0%    |
+
+### Notes
+
+- L1 cache miss rate dropped 23% — pool keeps hash nodes in compact memory instead of
+  scattered across malloc'd pages.
+- IPC improved to 1.88 — fewer stalls waiting for cache misses.
+- Same instruction count as 3.6b (pool doesn't change the code path, just the allocator).
+- p99.9 recovered from the 3.6b regression (449 vs 476) thanks to better cache behavior.
+
+---
+
 ## Running numbers log
 
 | Task | Change | p50 (ns) | p99 (ns) | p99.9 (ns) | Throughput (msg/s) | L1 miss % | IPC | Branch miss % | Notes |
@@ -331,3 +369,4 @@ Eliminates all rehash cycles during typical sessions.
 | 3.5  | Flat tick-indexed array | 56 | 269 | 698 | 7.47M | 1.42% | 1.77 | 1.33% | p50 -46%, throughput +30%, O(1) level lookup |
 | 3.6  | FreeListPool allocator | 51 | 223 | 421 | 8.15M | 1.33% | 1.73 | 1.42% | p99.9 -40%, throughput +9%, no per-node malloc |
 | 3.6b | unordered_map reserve | 48 | 218 | 476 | 8.84M | 1.45% | 1.82 | 1.28% | Add p50 -36%, throughput +8%, no rehash |
+| 3.6c | Pool hash nodes | 44 | 209 | 449 | 9.21M | 1.11% | 1.88 | 1.28% | L1 miss -23%, IPC +3%, compact hash nodes |
