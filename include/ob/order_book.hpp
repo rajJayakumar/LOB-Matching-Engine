@@ -68,9 +68,10 @@ private:
     Price tick_size_;
     std::size_t band_size_;
 
-    // Pool for std::list node allocations — declared before the vectors so it
-    // is destroyed after them (reverse declaration order).
-    std::unique_ptr<FreeListPool> node_pool_;
+    // Pools for fixed-size node allocations — declared before the containers
+    // they back so they are destroyed after them (reverse declaration order).
+    std::unique_ptr<FreeListPool> node_pool_;   // std::list nodes
+    std::unique_ptr<FreeListPool> index_pool_;  // unordered_map nodes
 
     // Flat tick-indexed arrays for each side.
     std::vector<PriceLevel> bid_levels_;
@@ -92,8 +93,10 @@ private:
     std::map<Price, PriceLevel, std::greater<>> bid_overflow_;
     std::map<Price, PriceLevel> ask_overflow_;
 
-    // O(1) cancel lookup
-    std::unordered_map<OrderId, Locator> index_;
+    // O(1) cancel lookup — pool-allocated to avoid per-node malloc
+    using IndexAlloc = PoolAllocator<std::pair<const OrderId, Locator>>;
+    std::unordered_map<OrderId, Locator, std::hash<OrderId>,
+                       std::equal_to<OrderId>, IndexAlloc> index_;
 
     std::uint64_t next_sequence_ = 1;
 

@@ -22,6 +22,9 @@ OrderBook::OrderBook(Price tick_size, std::size_t band_size)
     : tick_size_(tick_size)
     , band_size_(band_size)
     , node_pool_(std::make_unique<FreeListPool>(8192))
+    , index_pool_(std::make_unique<FreeListPool>(8192))
+    , index_(1 << 18, std::hash<OrderId>{}, std::equal_to<OrderId>{},
+             IndexAlloc(index_pool_.get()))
 {
     bid_levels_.reserve(band_size);
     for (std::size_t i = 0; i < band_size; ++i) {
@@ -31,7 +34,6 @@ OrderBook::OrderBook(Price tick_size, std::size_t band_size)
     for (std::size_t i = 0; i < band_size; ++i) {
         ask_levels_.emplace_back(node_pool_.get());
     }
-    index_.reserve(1 << 18);  // 256K buckets — avoids rehash for typical sessions
 }
 
 // ---------------------------------------------------------------------------
